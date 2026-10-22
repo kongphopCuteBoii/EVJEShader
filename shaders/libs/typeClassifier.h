@@ -1,0 +1,15 @@
+#define TYPE_TERRAIN          1
+#define TYPE_TERRAIN_DH       2
+#define TYPE_TERRAIN_CUTOUT   3
+#define TYPE_WATER            4
+#define TYPE_ENTITY           5
+#define TYPE_ENTITY_TRANS     6
+#define TYPE_BLOCK            7
+#define TYPE_BLOCK_TRANS      8
+#define TYPE_PARTICLE         9
+#define TYPE_PARTICLE_TRANS  10
+#define TYPE_HAND            11
+#define TYPE_WEATHER         12
+#define TYPE_SKY             13
+#define TYPE_SKY_TEXTURED    14
+#define TYPE_CLOUD           15
