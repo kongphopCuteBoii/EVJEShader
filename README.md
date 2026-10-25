@@ -1,4 +1,4 @@
-# Enhanced Visuals Shader — Crystaline
+# Enhanced Visuals Shader; Crystaline
 
 [🇬🇧 English](README.md) · [🇹🇭 ภาษาไทย](README.th.md)
 
