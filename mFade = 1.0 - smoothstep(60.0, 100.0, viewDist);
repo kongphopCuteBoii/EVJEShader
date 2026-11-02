@@ -1,0 +1,1848 @@
+[1mdiff --git a/shaders/composite.fsh b/shaders/composite.fsh[m
+[1mindex 9819e09..f952bb7 100644[m
+[1m--- a/shaders/composite.fsh[m
+[1m+++ b/shaders/composite.fsh[m
+[36m@@ -19,10 +19,9 @@[m [muniform float viewHeight;[m
+ uniform ivec2 eyeBrightnessSmooth;[m
+ [m
+ in vec2 texCoord;[m
+[31m-in vec3 sunDir,[m
+[31m-        moonDir;[m
+[32m+[m[32mflat in vec3 sunDir,[m
+[32m+[m[32m             moonDir;[m
+ flat in vec3 sunC,[m
+[31m-             sunlightC,[m
+              ambientC,[m
+              skyC,[m
+              horizonC,[m
+[36m@@ -32,6 +31,11 @@[m [mflat in vec3 keyDir,[m
+              keySpecC;[m
+ flat in vec4 nightP,[m
+              vAtlas;[m
+[32m+[m[32mflat in vec3  fogKeyC,[m
+[32m+[m[32m              uwBodyC;[m
+[32m+[m[32mflat in float skyPx,[m
+[32m+[m[32m              skyExposure,[m
+[32m+[m[32m              glintGate;[m
+ [m
+ #ifndef PI[m
+     #define PI 3.141592653589793[m
+[36m@@ -199,12 +203,11 @@[m [mvoid main() {[m
+ [m
+     const vec3 up = vec3(0.0, 1.0, 0.0);[m
+     vec3  V          = normalize(cameraPosition - worldPos);[m
+[31m-    float pixelAngle = 2.0 / (gbufferProjection[1][1] * viewHeight);[m
+ [m
+     vec3 playerPos = mat3(gbufferModelViewInverse) * viewPos + gbufferModelViewInverse[3].xyz;[m
+     vec2 waveXZ    = swellCoord(playerPos.xz, cameraPosition);[m
+ [m
+[31m-    SwellSample wave = swellDetail(waveXZ, frameTimeCounter, V, viewDistance, pixelAngle);[m
+[32m+[m[32m    SwellSample wave = swellDetail(waveXZ, frameTimeCounter, V, viewDistance, skyPx);[m
+ [m
+     vec3  nDetail      = swellNormalWS(wave.grad);[m
+     float roughness    = min(sqrt(WATER_BASE_ROUGHNESS * WATER_BASE_ROUGHNESS + wave.rough * wave.rough), 0.5),[m
+[36m@@ -224,7 +227,7 @@[m [mvoid main() {[m
+               tir     = 1.0 - smoothstep(0.60, 0.72, cosI),[m
+               mirrorConf;[m
+         vec3  mirror  = environmentReflection(viewPos, nTraceV, nDownV, reflDir, roughness, -1e9, UW_SSR_DISTANCE, 0.0, 0.0, vec3(1.0), vec3(1.0), mirrorConf),[m
+[31m-              bodyCol = ambientC * UW_AMBIENT * UW_WATER_COLOR * UW_ALBEDO * exp(-UW_AMBIENT_EXT * uwEyeDepth());[m
+[32m+[m[32m              bodyCol = uwBodyC;[m
+         mirror = applyFog(mix(bodyCol, mirror, mirrorConf), gbufferModelViewInverse[3].xyz, playerPos, getIGN(gl_FragCoord.xy), 1.0, keyDir, keyDiscC, ambientC, false);[m
+         float fresUp  = mix(F_Schlick(cosI, vec3(WATER_F0), roughness).x, 1.0, tir);[m
+         outColor = vec4(mix(sceneColor, mirror, fresUp), 1.0);[m
+[36m@@ -251,14 +254,12 @@[m [mvoid main() {[m
+     waterMat.F0       = vec3(WATER_F0);[m
+     waterMat.metallic = 0.0;[m
+     waterMat.emissive = 0.0;[m
+[31m-    vec3 glint = shadeSunSpecular(waterMat, nDetail, V, keyDir, sunlightC, keySpecC) * smoothstep(-0.02, 0.06, keyDir.y)[m
+[31m-               * ((NIGHT_MOON_GLINT != 0) ? 1.0 : 1.0 - nightP.x);[m
+[32m+[m[32m    vec3 glint = shadeSunSpecular(waterMat, nDetail, V, keyDir, keySpecC) * glintGate;[m
+     glint = glint / (1.0 + glint / WATER_GLINT_MAX);[m
+     waterColor += glint * (1.0 - ssrConfidence * WATER_GLINT_SSR_MASK);[m
+ [m
+[31m-    float fogDither   = getIGN(gl_FragCoord.xy),[m
+[31m-          skyExposure = mix(FOG_CAVE_FLOOR, 1.0, saturate(float(eyeBrightnessSmooth.y) / 240.0));[m
+[31m-    waterColor = applyFog(waterColor, gbufferModelViewInverse[3].xyz, playerPos, fogDither, skyExposure, keyDir, keyDiscC * ((NIGHT_MOON_FOG_SHAFTS != 0) ? 1.0 : 1.0 - nightP.x), ambientC, false);[m
+[32m+[m[32m    float fogDither = getIGN(gl_FragCoord.xy);[m
+[32m+[m[32m    waterColor = applyFog(waterColor, gbufferModelViewInverse[3].xyz, playerPos, fogDither, skyExposure, keyDir, fogKeyC, ambientC, false);[m
+ [m
+     outColor = vec4(waterColor, 1.0);[m
+ }[m
+[1mdiff --git a/shaders/composite1.fsh b/shaders/composite1.fsh[m
+[1mindex 4d36fc8..e9dd175 100644[m
+[1m--- a/shaders/composite1.fsh[m
+[1m+++ b/shaders/composite1.fsh[m
+[36m@@ -6,10 +6,9 @@[m [muniform vec3 cameraPosition;[m
+ uniform float near, far, frameTimeCounter;[m
+ uniform ivec2 eyeBrightnessSmooth;[m
+ in vec2 texCoord;[m
+[31m-in vec3 sunDir,[m
+[31m-        moonDir;[m
+[32m+[m[32mflat in vec3 sunDir,[m
+[32m+[m[32m             moonDir;[m
+ flat in vec3 sunC,[m
+[31m-             sunlightC,[m
+              ambientC,[m
+              skyC,[m
+              horizonC,[m
+[36m@@ -19,6 +18,10 @@[m [mflat in vec3 keyDir,[m
+              keySpecC;[m
+ flat in vec4 nightP,[m
+              vAtlas;[m
+[32m+[m[32mflat in vec3  fogKeyC,[m
+[32m+[m[32m              cloudSunC,[m
+[32m+[m[32m              cloudAmbC;[m
+[32m+[m[32mflat in float skyExposure;[m
+ /* DRAWBUFFERS:0 */[m
+ layout(location = 0) out vec4 outColor;[m
+ [m
+[36m@@ -50,7 +53,7 @@[m [mvec3 cloudsOverSurface(vec3 color, vec3 footPlayerPos) {[m
+             float cloudTrans;[m
+             vec3  cloudRad;[m
+             color = CLOUD_GRADE * miraiCloudCompositeCut([m
+[31m-                cloudCam, rayDir, keyDir, keyDiscC * (CLOUD_SUN_INPUT * 5. * ((NIGHT_MOON_CLOUDS != 0) ? 1.0 : 1.0 - nightP.x)), ambientC * CLOUD_AMBIENT_INPUT,[m
+[32m+[m[32m                cloudCam, rayDir, keyDir, cloudSunC, cloudAmbC,[m
+                 color / CLOUD_GRADE, frameTimeCounter * CLOUD_WIND_SPEED, surfaceDist, cloudTrans, cloudRad);[m
+         }[m
+     #endif[m
+[36m@@ -79,8 +82,7 @@[m [mvoid main() {[m
+         color = refr * tint;[m
+ [m
+         vec3  glassPlayer = (gbufferModelViewInverse * vec4(viewPosFromDepth(gbufferProjectionInverse, texCoord, depth), 1.0)).xyz;[m
+[31m-        float skyExposure = mix(FOG_CAVE_FLOOR, 1.0, saturate(float(eyeBrightnessSmooth.y) / 240.0));[m
+[31m-        color = applyFog(color, gbufferModelViewInverse[3].xyz, glassPlayer, getIGN(gl_FragCoord.xy), skyExposure, keyDir, keyDiscC * ((NIGHT_MOON_FOG_SHAFTS != 0) ? 1.0 : 1.0 - nightP.x), ambientC, false);[m
+[32m+[m[32m        color = applyFog(color, gbufferModelViewInverse[3].xyz, glassPlayer, getIGN(gl_FragCoord.xy), skyExposure, keyDir, fogKeyC, ambientC, false);[m
+     }[m
+ [m
+     float dhDepth = (depth < 1.0) ? 1.0 : texture(dhDepthTex0, texCoord).r;[m
+[1mdiff --git a/shaders/composite3.fsh b/shaders/composite3.fsh[m
+[1mindex 7d5202f..a8b7cc1 100644[m
+[1m--- a/shaders/composite3.fsh[m
+[1m+++ b/shaders/composite3.fsh[m
+[36m@@ -6,10 +6,10 @@[m
+ /* RENDERTARGETS: 5 */[m
+ layout(location = 0) out vec4 outBloom;[m
+ [m
+[31m-uniform sampler2D colortex0, colortex11;[m
+[32m+[m[32muniform sampler2D colortex0;[m
+ in vec2 texCoord;[m
+[32m+[m[32mflat in float exposure;[m
+ [m
+ void main() {[m
+[31m-    float exposure = exposureFromLuma(texelFetch(colortex11, ivec2(0), 0).r);[m
+     outBloom = vec4(kawaseDownPrefilter(colortex0, texCoord, exposure), 1.0); // (010) Down 1/2, prefiltered[m
+ }[m
+[1mdiff --git a/shaders/composite3.vsh b/shaders/composite3.vsh[m
+[1mindex 7d2bfc6..d0c06dc 100644[m
+[1m--- a/shaders/composite3.vsh[m
+[1m+++ b/shaders/composite3.vsh[m
+[36m@@ -1 +1,16 @@[m
+[31m-#include "/libs/buffersShared/compositeVertex.glsl"[m
+[32m+[m[32m#version 460 compatibility[m
+[32m+[m
+[32m+[m[32m#include "/libs/exposure.h"[m
+[32m+[m
+[32m+[m[32muniform sampler2D colortex11;[m
+[32m+[m
+[32m+[m[32mout vec2 texCoord;[m
+[32m+[m[32mflat out float exposure;[m
+[32m+[m
+[32m+[m[32mvoid main() {[m
+[32m+[m[32m    gl_Position = ftransform();[m
+[32m+[m[32m    texCoord = gl_MultiTexCoord0.st;[m
+[32m+[m
+[32m+[m[32m    // (001) Adapted Exposure (per-frame, read from the exposure texel)[m
+[32m+[m[32m    exposure = exposureFromLuma(texelFetch(colortex11, ivec2(0), 0).r);[m
+[32m+[m[32m}[m
+[1mdiff --git a/shaders/deferred.fsh b/shaders/deferred.fsh[m
+[1mindex ae21c92..677169b 100644[m
+[1m--- a/shaders/deferred.fsh[m
+[1m+++ b/shaders/deferred.fsh[m
+[36m@@ -30,6 +30,8 @@[m [muniform mat4 shadowModelView, shadowModelViewInverse;[m
+ uniform mat4 shadowProjection, shadowProjectionInverse;[m
+ [m
+ in vec2 texCoord;[m
+[32m+[m[32mflat in int   nightNoGI;[m
+[32m+[m[32mflat in float aspect;[m
+ [m
+ #include "/libs/mathUtils.glsl"[m
+ [m
+[36m@@ -128,7 +130,6 @@[m [mvec3 hNormal = worldNormal * 0.5 + 0.5;[m
+     float aoFade = 1.0 - smoothstep(48.0, 80.0, viewDist);[m
+ [m
+     if (aoFade > 0.0 && !isDHTerrain) {[m
+[31m-        float aspect = viewWidth / viewHeight;[m
+         float aoRadius = 1.0;[m
+         [m
+         float projScale = 0.5 * aoRadius / viewDist;[m
+[36m@@ -170,9 +171,8 @@[m [mvec3 hNormal = worldNormal * 0.5 + 0.5;[m
+     float rsmFade = 1.0 - smoothstep(60.0, 100.0, viewDist);[m
+     const vec3 SUN_LIGHT_COLOR = vec3(1.0);[m
+ [m
+[31m-    bool nightNoGI = (NIGHT_RSM_GI == 0) && (normalize(mat3(gbufferModelViewInverse) * sunPosition).y < -0.03);[m
+[31m-    if (rsmFade > 0.0 && !isDHTerrain && !nightNoGI) {[m
+[31m-        const int   RSM_SAMPLES      = 24;[m
+[32m+[m[32m    if (rsmFade > 0.0 && !isDHTerrain && nightNoGI == 0) {[m
+[32m+[m[32m        const int   RSM_SAMPLES      = 16;[m
+         const float RSM_WORLD_RADIUS = 2.0;[m
+         const float RSM_MIN_DIST_SQ  = 0.25;[m
+         const float RSM_MAX_DIST_SQ  = 64.0;[m
+[1mdiff --git a/shaders/deferred.vsh b/shaders/deferred.vsh[m
+[1mindex 7d2bfc6..67fdc90 100644[m
+[1m--- a/shaders/deferred.vsh[m
+[1m+++ b/shaders/deferred.vsh[m
+[36m@@ -1 +1,20 @@[m
+[31m-#include "/libs/buffersShared/compositeVertex.glsl"[m
+[32m+[m[32m#version 460 compatibility[m
+[32m+[m
+[32m+[m[32m#include "/libs/nightEditor.h"[m
+[32m+[m
+[32m+[m[32muniform vec3  sunPosition;[m
+[32m+[m[32muniform float viewWidth, viewHeight;[m
+[32m+[m[32muniform mat4  gbufferModelViewInverse;[m
+[32m+[m
+[32m+[m[32mout vec2 texCoord;[m
+[32m+[m[32mflat out int   nightNoGI;[m
+[32m+[m[32mflat out float aspect;[m
+[32m+[m
+[32m+[m[32mvoid main() {[m
+[32m+[m[32m    gl_Position = ftransform();[m
+[32m+[m[32m    texCoord = gl_MultiTexCoord0.st;[m
+[32m+[m
+[32m+[m[32m    // (001) Per-Frame GI Gate & Aspect Ratio[m
+[32m+[m[32m    nightNoGI = ((NIGHT_RSM_GI == 0) && (normalize(mat3(gbufferModelViewInverse) * sunPosition).y < -0.03)) ? 1 : 0;[m
+[32m+[m[32m    aspect    = viewWidth / viewHeight;[m
+[32m+[m[32m}[m
+[1mdiff --git a/shaders/deferred3.fsh b/shaders/deferred3.fsh[m
+[1mindex 1176fbd..0dc4320 100644[m
+[1m--- a/shaders/deferred3.fsh[m
+[1m+++ b/shaders/deferred3.fsh[m
+[36m@@ -1,727 +1,62 @@[m
+ #version 460 compatibility[m
+ [m
+[31m-#include "/libs/irisEssentials.h"[m
+[31m-[m
+[31m-#include "/libs/typeClassifier.h"[m
+[31m-#include "/libs/gbufferPacking.h"[m
+ #include "/libs/coreFunctions/atmosphericScattering.glsl"[m
+[31m-#include "/libs/nightEditor.h"[m
+[31m-#include "/libs/shadowEssentials.h"[m
+[31m-[m
+ #include "/libs/coreFunctions/cloudSettings.glsl"[m
+[31m-/* DRAWBUFFERS:02 */[m
+[31m-layout(location = 0) out vec4 outColor;[m
+[31m-layout(location = 1) out vec4 outReflect;[m
+ [m
+[32m+[m[32m/* RENDERTARGETS: 14 */[m
+[32m+[m[32mlayout(location = 0) out vec4 outCloud;[m
+ [m
+[31m-uniform mat4 gbufferProjectionInverse,[m
+[31m-             gbufferModelViewInverse,[m
+[31m-             shadowModelView,[m
+[31m-             shadowProjection,[m
+[31m-             shadowProjectionInverse;[m
+[31m-#ifdef DISTANT_HORIZONS[m
+[31m-    uniform mat4      dhProjectionInverse;[m
+[31m-    uniform sampler2D dhDepthTex0;[m
+[31m-#endif[m
+[31m-uniform sampler2D colortex0,[m
+[31m-                  colortex1,[m
+[31m-                  colortex2,[m
+[31m-                  colortex5,[m
+[31m-                  colortex7,[m
+[31m-                  depthtex1,[m
+[31m-                  shadowtex0,[m
+[31m-                  shadowtex1,[m
+[31m-                  shadowcolor0;[m
+[31m-uniform vec3  shadowLightPosition,[m
+[31m-              cameraPosition,[m
+[31m-              sunPosition;[m
+[32m+[m[32muniform sampler2D depthtex1;[m
+[32m+[m[32muniform mat4  gbufferProjectionInverse,[m
+[32m+[m[32m              gbufferModelViewInverse;[m
+[32m+[m[32muniform vec3  cameraPosition;[m
+ uniform float frameTimeCounter,[m
+               viewWidth,[m
+               viewHeight;[m
+[31m-uniform ivec2 eyeBrightnessSmooth;[m
+[32m+[m[32muniform int   isEyeInWater;[m
+ [m
+ in vec2 texCoord;[m
+[31m-in vec3 sunDir,[m
+[31m-        moonDir;[m
+[31m-[m
+[31m-flat in vec3 sunC,[m
+[31m-             sunlightC,[m
+[31m-             ambientC,[m
+[32m+[m[32mflat in vec3 sunDir,[m
+[32m+[m[32m             sunC,[m
+              skyC,[m
+[31m-             horizonC,[m
+[31m-             fogC;[m
+[32m+[m[32m             horizonC;[m
+[32m+[m[32mflat in vec4 vAtlas;[m
+ flat in vec3 keyDir,[m
+              keyDiscC,[m
+[31m-             keySpecC;[m
+[31m-flat in vec4 nightP,[m
+[31m-             vAtlas;[m
+[31m-[m
+[31m-[m
+[31m-[m
+[31m-// (010) Math & Coordinate Utilities[m
+[31m-// (011) Constants & Macros[m
+[31m-#ifndef PI[m
+[31m-    #define PI 3.141592653589793[m
+[31m-#endif[m
+[32m+[m[32m             cloudSunC,[m
+[32m+[m[32m             cloudAmbC,[m
+[32m+[m[32m             cloudHazeExt;[m
+ [m
+ #define saturate(x) clamp(x, 0.0, 1.0)[m
+ [m
+[31m-float sq(float x)    { return x * x; }[m
+[31m-float cube(float x)  { return x * x * x; }[m
+[31m-float pow15(float x) { return x * sqrt(x); }[m
+[31m-[m
+[31m-const mat2 GOLDEN_ROT  = mat2(cos(2.3999632), sin(2.3999632), -sin(2.3999632), cos(2.3999632)),[m
+[31m-           GOLDEN_ROT4 = mat2(cos(9.5998528), sin(9.5998528), -sin(9.5998528), cos(9.5998528));[m
+[31m-[m
+[31m-#ifndef HAND_DEPTH[m
+[31m-    #define HAND_DEPTH 0.125[m
+[32m+[m[32m// (100) Half-Resolution Volumetric Clouds[m
+[32m+[m[32m// Output: rgb = cloud radiance, a = transmittance (a < 0 marks a texel that was never marched)[m
+[32m+[m[32mvoid main() {[m
+[32m+[m[32m#ifndef MIRAI_CLOUDS[m
+[32m+[m[32m    outCloud = vec4(0.0, 0.0, 0.0, 1.0);[m
+[32m+[m[32m    return;[m
+[32m+[m[32m#else[m
+[32m+[m[32m    // (101) Footprint Sky Test: only march when one of the 2x2 full-res pixels this texel covers shows sky[m
+[32m+[m[32m    ivec2 fp       = ivec2(gl_FragCoord.xy) * 2;[m
+[32m+[m[32m    float depthMax = max(max(texelFetch(depthtex1, fp, 0).r, texelFetch(depthtex1, fp + ivec2(1, 0), 0).r),[m
+[32m+[m[32m                         max(texelFetch(depthtex1, fp + ivec2(0, 1), 0).r, texelFetch(depthtex1, fp + ivec2(1, 1), 0).r));[m
+[32m+[m[32m    if (depthMax < 1.0) { outCloud = vec4(0.0, 0.0, 0.0, -1.0); return; }[m
+[32m+[m[32m    if (isEyeInWater != 0) { outCloud = vec4(0.0, 0.0, 0.0, 1.0); return; }[m
+[32m+[m
+[32m+[m[32m    // (102) View Ray Through The Centre Of The 2x2 Block[m
+[32m+[m[32m    vec4 clipFar = gbufferProjectionInverse * vec4((vec2(fp) + 1.0) / vec2(viewWidth, viewHeight) * 2.0 - 1.0, 1.0, 1.0);[m
+[32m+[m[32m    vec3 rayDir  = normalize(mat3(gbufferModelViewInverse) * (clipFar.xyz / clipFar.w));[m
+[32m+[m
+[32m+[m[32m    // (103) Aerial Perspective Colour: the real sky in this direction (atlas + sun halo + sunset glow), so clouds sit INSIDE the atmosphere[m
+[32m+[m[32m    vec3 hazeCol = skyBody(rayDir, vAtlas, sunDir, sunC, horizonC) * CLOUD_HAZE_GAIN;[m
+[32m+[m
+[32m+[m[32m    // (104) March[m
+[32m+[m[32m    vec3  cloudRad;[m
+[32m+[m[32m    float cloudTrans;[m
+[32m+[m[32m    miraiCloudLayer(vec3(cameraPosition.x, cameraPosition.y - CLOUD_ALTITUDE_BIAS, cameraPosition.z),[m
+[32m+[m[32m                    rayDir, keyDir, cloudSunC, cloudAmbC,[m
+[32m+[m[32m                    frameTimeCounter * CLOUD_WIND_SPEED, CLOUD_MAX_DIST, cloudHazeExt, hazeCol,[m
+[32m+[m[32m                    cloudRad, cloudTrans);[m
+[32m+[m[32m    outCloud = vec4(cloudRad, cloudTrans);[m
+ #endif[m
+[31m-[m
+[31m-// (012) Depth Linearization & Normals[m
+[31m-float linZ(float depthVal) {[m
+[31m-    float ndcDepth = depthVal * 2.0 - 1.0;[m
+[31m-    return -gbufferProjectionInverse[3][2] / (gbufferProjectionInverse[2][3] * ndcDepth + gbufferProjectionInverse[3][3]);[m
+[31m-}[m
+[31m-[m
+[31m-vec3 decodeN(vec3 rawNormal) { return rawNormal * 2.0 - 1.0; }[m
+[31m-[m
+[31m-// (013) Projection Helpers[m
+[31m-vec3 projectAndDivide(mat4 projMatrix, vec3 pos) {[m
+[31m-    return vec3(pos.xy * vec2(projMatrix[0][0], projMatrix[1][1]), projMatrix[2][2] * pos.z + projMatrix[3][2]) / (projMatrix[2][3] * pos.z + projMatrix[3][3]);[m
+[31m-}[m
+[31m-[m
+[31m-// (014) Dithering & Noise[m
+[31m-float getIGN(vec2 fragCoord) {[m
+[31m-    vec3 magic = vec3(0.06711056, 0.00583715, 52.9829189);[m
+[31m-    return fract(magic.z * fract(dot(fragCoord, magic.xy)));[m
+[31m-}[m
+[31m-[m
+[31m-[m
+[31m-[m
+[31m-// (020) PCF Shadow Utilities[m
+[31m-// (021) Shadow Tap[m
+[31m-float shadowTap(float depthSample, float receiverDepth, float softK, float floorK) {[m
+[31m-    if (softK <= 0.0) return step(receiverDepth, depthSample);[m
+[31m-    float t = exp(-max(receiverDepth - depthSample, 0.0) * softK);[m
+[31m-    return mix(floorK, 1.0, t);[m
+[31m-}[m
+[31m-[m
+[31m-[m
+[31m-[m
+[31m-// (030) Surface Shading & Material Models[m
+[31m-// (031) Unified PBR Module[m
+[31m-#include "/libs/coreFunctions/pbrModule.glsl"[m
+[31m-[m
+[31m-[m
+[31m-[m
+[31m-// (040) Shadow Processing & Filtering[m
+[31m-// (041) Soft Shadow Depth Test & Foliage Beer-Lambert Extinction[m
+[31m-float shadowTap(float depthSample, float receiverDepth, float softK) {[m
+[31m-    return (softK > 0.0) ? exp(-max(receiverDepth - depthSample, 0.0) * softK) : step(receiverDepth, depthSample);[m
+[31m-}[m
+[31m-[m
+[31m-// (042) Non-Linear Shadow Map Distortion[m
+[31m-vec3 distortShadowClipPos(vec3 shadowClipPos) {[m
+[31m-    float distortionFactor = length(shadowClipPos.xy) + 0.1;[m
+[31m-    shadowClipPos.xy /= distortionFactor;[m
+[31m-    shadowClipPos.z  *= 0.5;[m
+[31m-    return shadowClipPos;[m
+[31m-}[m
+[31m-[m
+[31m-// (043) Soft Knee Helper[m
+[31m-vec3 softKnee(vec3 x, float knee) {[m
+[31m-    vec3 excess = max(x - knee, 0.0);[m
+[31m-    return x - excess + excess / (1.0 + excess);[m
+ }[m
+[31m-[m
+[31m-[m
+[31m-[m
+[31m-// (050) Burley Normalized Diffusion SSS[m
+[31m-const float SSS_PI = 3.14159265;[m
+[31m-[m
+[31m-// (051) Shape Factor Parameterisation[m
+[31m-vec3 burleyS(vec3 albedo) {[m
+[31m-    vec3 delta = albedo - 0.8;[m
+[31m-    return 1.9 - albedo + 3.5 * delta * delta;[m
+[31m-}[m
+[31m-[m
+[31m-// (052) Per-Channel Scattering Distance[m
+[31m-vec3 burleyD(vec3 albedo, vec3 mfp) {[m
+[31m-    return mfp / burleyS(albedo);[m
+[31m-}[m
+[31m-[m
+[31m-// (053) Radial Profile Evaluation[m
+[31m-vec3 burleyShape(float dist, vec3 diffScale) {[m
+[31m-    dist = max(dist, 1e-5);[m
+[31m-    return (exp(-dist / diffScale) + exp(-dist / (3.0 * diffScale))) / (8.0 * SSS_PI * diffScale * dist);[m
+[31m-}[m
+[31m-[m
+[31m-// (054) Exact Inverse-CDF Profile Radius Sampling[m
+[31m-float sampleBurleyRadius(float randomSample, float diffScale, out float pdfR) {[m
+[31m-    float sampleVal = max(1.0 - randomSample, 1e-6),[m
+[31m-          rootParam = 2.0 * sampleVal + sqrt(4.0 * sampleVal * sampleVal + 1.0),[m
+[31m-          cubeDiff  = pow(rootParam, 1.0 / 3.0) - pow(rootParam, -1.0 / 3.0),[m
+[31m-          radiusFac = -3.0 * log(max(cubeDiff, 1e-6));[m
+[31m-[m
+[31m-    pdfR = (exp(-radiusFac) + cubeDiff) / (4.0 * diffScale);[m
+[31m-    return radiusFac * diffScale;[m
+[31m-}[m
+[31m-[m
+[31m-// (055) Thin-Slab Slab Transmission[m
+[31m-vec3 burleyTransmittance(vec3 albedo, vec3 mfp, float slabThickness) {[m
+[31m-    vec3 expTerm = exp(-slabThickness / (3.0 * burleyD(albedo, mfp)));[m
+[31m-    return 0.25 * albedo * (expTerm * expTerm * expTerm + 3.0 * expTerm);[m
+[31m-}[m
+[31m-[m
+[31m-[m
+[31m-[m
+[31m-// (060) Ambient Occlusion & Global Illumination[m
+[31m-// (061) Multi-Bounce Approximated GTAO[m
+[31m-vec3 GTAOMultiBounce(float visibility, vec3 albedo) {[m
+[31m-    vec3 quadA = 2.0404 * albedo - 0.3324,[m
+[31m-         quadB = -4.7951 * albedo + 0.6417,[m
+[31m-         quadC = 2.7552 * albedo + 0.6903;[m
+[31m-    float vis  = visibility;[m
+[31m-[m
+[31m-    return max(vec3(vis), ((vis * quadA + quadB) * vis + quadC) * vis);[m
+[31m-}[m
+[31m-[m
+[31m-// (062) Joint Bilateral GI / AO Upsampling[m
+[31m-vec4 upsampleGIAO(float depth0, vec3 normal0) {[m
+[31m-    vec2  pixelCoord = gl_FragCoord.xy;[m
+[31m-    if (depth0 >= 1.0) return vec4(0.0, 0.0, 0.0, 1.0);[m
+[31m-[m
+[31m-    float linearZ0   = linZ(depth0),[m
+[31m-          invDepthTol = 1.0 / (0.03 * linearZ0);[m
+[31m-[m
+[31m-    vec2  halfCoord    = (pixelCoord - 0.5) * 0.5,[m
+[31m-          subFrac      = halfCoord - vec2(ivec2(floor(halfCoord)));[m
+[31m-    ivec2 baseCoord    = ivec2(floor(halfCoord)),[m
+[31m-          maxHalfCoord = textureSize(colortex7, 0) - 1;[m
+[31m-[m
+[31m-    vec4  accumColor = vec4(0.0);[m
+[31m-    float weightSum  = 0.0;[m
+[31m-[m
+[31m-    for (int j = 0; j < 2; j++) {[m
+[31m-        for (int i = 0; i < 2; i++) {[m
+[31m-            ivec2 sampleCoord = clamp(baseCoord + ivec2(i, j), ivec2(0), maxHalfCoord);[m
+[31m-            vec4  guideTexel  = texelFetch(colortex7, sampleCoord, 0);[m
+[31m-            if (guideTexel.a <= 0.0) continue;[m
+[31m-[m
+[31m-            float weightBilinear = (i == 0 ? 1.0 - subFrac.x : subFrac.x) * (j == 0 ? 1.0 - subFrac.y : subFrac.y),[m
+[31m-                  weightDepth    = exp(-abs(guideTexel.a - linearZ0) * invDepthTol),[m
+[31m-                  normalDot      = max(dot(normal0, decodeN(guideTexel.rgb)), 0.0),[m
+[31m-                  normal4        = sq(sq(normalDot)),[m
+[31m-                  weightNormal   = sq(sq(normal4)),[m
+[31m-                  totalWeight    = weightBilinear * weightDepth * weightNormal;[m
+[31m-[m
+[31m-            accumColor += texelFetch(colortex5, sampleCoord, 0) * totalWeight;[m
+[31m-            weightSum  += totalWeight;[m
+[31m-        }[m
+[31m-    }[m
+[31m-    if (weightSum > 1e-4) return accumColor / weightSum;[m
+[31m-[m
+[31m-    float bestScore = 1e9;[m
+[31m-    vec4  bestTexel = vec4(0.0, 0.0, 0.0, 1.0);[m
+[31m-[m
+[31m-    for (int j = -1; j <= 2; j++) {[m
+[31m-        for (int i = -1; i <= 2; i++) {[m
+[31m-            ivec2 sampleCoord = clamp(baseCoord + ivec2(i, j), ivec2(0), maxHalfCoord);[m
+[31m-            vec4  guideTexel  = texelFetch(colortex7, sampleCoord, 0);[m
+[31m-            if (guideTexel.a <= 0.0) continue;[m
+[31m-[m
+[31m-            float normalDot = dot(normal0, decodeN(guideTexel.rgb));[m
+[31m-            if (normalDot < 0.5) continue;[m
+[31m-[m
+[31m-            float score = abs(guideTexel.a - linearZ0) / linearZ0 + (1.0 - normalDot);[m
+[31m-            if (score < bestScore) {[m
+[31m-                bestScore = score;[m
+[31m-                bestTexel = texelFetch(colortex5, sampleCoord, 0);[m
+[31m-            }[m
+[31m-        }[m
+[31m-    }[m
+[31m-    return bestTexel;[m
+[31m-}[m
+[31m-[m
+[31m-[m
+[31m-[m
+[31m-// (070) Volumetric Fog[m
+[31m-#include "/libs/coreFunctions/volumetricFog.glsl"[m
+[31m-[m
+[31m-[m
+[31m-[m
+[31m-void main() {[m
+[31m-    // (100) G-Buffer Decoding & Scene Detection[m
+[31m-    // (101) Raw Buffer Samples[m
+[31m-    ivec2 pixelPos = ivec2(gl_FragCoord.xy);[m
+[31m-    float ign      = getIGN(gl_FragCoord.xy);[m
+[31m-    vec4  albedo   = texelFetch(colortex0, pixelPos, 0),[m
+[31m-          gbuf1    = texelFetch(colortex1, pixelPos, 0);[m
+[31m-    float depth    = texelFetch(depthtex1, pixelPos, 0).r;[m
+[31m-[m
+[31m-    vec3 worldNormal = decodeNormalOct(gbuf1.rg);[m
+[31m-[m
+[31m-    // (102) Scene Classification[m
+[31m-    int sceneType   = unpackSceneType(gbuf1.a),[m
+[31m-        foliageCode = unpackFoliageCode(gbuf1.a),[m
+[31m-        isFoliage   = foliageCode > 0 ? 1 : 0,[m
+[31m-        isLeaves    = foliageCode == 2 ? 1 : 0,[m
+[31m-        isCloth     = foliageCode == 3 ? 1 : 0;[m
+[31m-[m
+[31m-    vec4  upscaledGIAO = (sceneType == TYPE_TERRAIN || sceneType == TYPE_TERRAIN_DH) ? upsampleGIAO(depth, worldNormal) : vec4(0.0, 0.0, 0.0, 1.0);[m
+[31m-    vec3  rsmRadiance  = upscaledGIAO.rgb;[m
+[31m-    float visibility   = upscaledGIAO.a;[m
+[31m-[m
+[31m-    // (103) Screen-Space & Depth Reconstruction[m
+[31m-    float handDepthFix = (sceneType == TYPE_HAND) ? 1.0 / HAND_DEPTH : 1.0;[m
+[31m-    #ifdef DISTANT_HORIZONS[m
+[31m-        float dhDepth     = texelFetch(dhDepthTex0, pixelPos, 0).r;[m
+[31m-        bool  isDhTerrain = (sceneType == TYPE_TERRAIN_DH) || (depth >= 1.0 && dhDepth < 1.0),[m
+[31m-              isSky       = (depth >= 1.) && (!isDhTerrain);[m
+[31m-        vec3  screenPos   = isDhTerrain ? vec3(texCoord, dhDepth) : vec3(texCoord, depth),[m
+[31m-              ndcPos      = vec3(screenPos.xy * 2.0 - 1.0, (screenPos.z * 2.0 - 1.0) * handDepthFix),[m
+[31m-              viewPos     = isDhTerrain ? projectAndDivide(dhProjectionInverse, ndcPos) : projectAndDivide(gbufferProjectionInverse, ndcPos);[m
+[31m-    #else[m
+[31m-        bool  isDhTerrain = false,[m
+[31m-              isSky       = (depth >= 1.0);[m
+[31m-        vec3  screenPos   = vec3(texCoord, depth),[m
+[31m-              ndcPos      = vec3(screenPos.xy * 2.0 - 1.0, (screenPos.z * 2.0 - 1.0) * handDepthFix),[m
+[31m-              viewPos     = projectAndDivide(gbufferProjectionInverse, ndcPos);[m
+[31m-    #endif[m
+[31m-[m
+[31m-    // (104) Material Attribute Reconstruction[m
+[31m-    vec4 pbrData = texelFetch(colortex2, pixelPos, 0);[m
+[31m-    Material mat = decodeMaterial(pbrData, albedo.rgb);[m
+[31m-[m
+[31m-    bool isShaded     = (sceneType == TYPE_TERRAIN || sceneType == TYPE_TERRAIN_DH || sceneType == TYPE_ENTITY || sceneType == TYPE_BLOCK || sceneType == TYPE_HAND),[m
+[31m-         isGlossy     = isShaded && !isSky && sceneType != TYPE_HAND && isReflective(mat);[m
+[31m-[m
+[31m-[m
+[31m-[m
+[31m-    // (200) Camera & View Space Vectors[m
+[31m-    // (201) Player & World Position Derivation[m
+[31m-    vec3 footPlayerPos = (gbufferModelViewInverse * vec4(viewPos, 1.0)).xyz,[m
+[31m-         eyePlayerPos  = footPlayerPos + gbufferModelViewInverse[3].xyz,[m
+[31m-         eyeCameraPos  = cameraPosition + gbufferModelViewInverse[3].xyz,[m
+[31m-         fragWorldPos  = eyeCameraPos + eyePlayerPos;[m
+[31m-[m
+[31m-    // (202) Directional Ray & Light Vectors[m
+[31m-    vec3 viewDir    = normalize(cameraPosition - fragWorldPos),[m
+[31m-         rayDir     = -viewDir,[m
+[31m-         lightPos   = keyDir,[m
+[31m-         finalColor = albedo.rgb;[m
+[31m-[m
+[31m-    float skyPx = 2.0 * gbufferProjectionInverse[1][1] / viewHeight,[m
+[31m-          skyW  = 1.8 * skyPx;[m
+[31m-[m
+[31m-[m
+[31m-[m
+[31m-    vec3 uwLightTint = vec3(1.0);[m
+[31m-[m
+[31m-    // (300) Composite & Lighting Pipeline[m
+[31m-    // (301) Sky Pass Rendering[m
+[31m-    if (isSky) {[m
+[31m-        /*[m
+[31m-        finalColor = renderAtmosphericSky([m
+[31m-            cameraPosition, rayDir, lightPos, [m
+[31m-            gl_FragCoord.xy, frameTimeCounter, 999999.0, dither[m
+[31m-        );[m
+[31m-        */[m
+[31m-        vec3 skyCol = skyHDR(rayDir, vAtlas, sunDir, sunC, skyC, horizonC, skyW, skyPx) * SKY_GRADE;[m
+[31m-        skyCol += nightSky(rayDir, sunDir, nightP, skyPx, frameTimeCounter, 1.0);[m
+[31m-        #ifdef MIRAI_CLOUDS[m
+[31m-            float cloudTrans;[m
+[31m-            vec3  cloudRad;[m
+[31m-            if (isEyeInWater == 0) skyCol = miraiCloudComposite([m
+[31m-                vec3(cameraPosition.x, cameraPosition.y - CLOUD_ALTITUDE_BIAS, cameraPosition.z),[m
+[31m-                rayDir, keyDir, keyDiscC * (CLOUD_SUN_INPUT * 5. * ((NIGHT_MOON_CLOUDS != 0) ? 1.0 : 1.0 - nightP.x)), ambientC * CLOUD_AMBIENT_INPUT,[m
+[31m-                skyCol, frameTimeCounter * CLOUD_WIND_SPEED, cloudTrans, cloudRad);[m
+[31m-        #endif[m
+[31m-        finalColor = skyCol * 0.3;[m
+[31m-    } [m
+[31m-    else if (isShaded) {[m
+[31m-        // (302) Terrain Shadow & Ambient Constants[m
+[31m-        const float SHADOW_BLUR_SCALE       = 0.015,[m
+[31m-                    SHADOW_MAX_BLUR         = 0.007,[m
+[31m-                    SHADOW_CONTACT_EXPONENT = 1.15,[m
+[31m-                    AMBIENT_INTENSITY       = 0.03,[m
+[31m-                    CAVE_MIN_LIGHT          = 0.020,[m
+[31m-                    CAVE_FALLOFF_CURVE      = 1.15;[m
+[31m-[m
+[31m-        const vec3 SUN_HAZE_COLOR       = vec3(1.00, 0.98, 0.92),[m
+[31m-                   GROUND_AMBIENT_COLOR = vec3(0.20, 0.20, 0.20);[m
+[31m-[m
+[31m-        // (303) Shadow Projection & Distortion Bias[m
+[31m-        float NdotL       = saturate(dot(worldNormal, lightPos)),[m
+[31m-              skyLightMap = gbuf1.b,[m
+[31m-              sunLeakMask = smoothstep(0.0, 0.10, skyLightMap);[m
+[31m-[m
+[31m-        vec3 shadowSamplePos   = (sceneType == TYPE_HAND) ? gbufferModelViewInverse[3].xyz : footPlayerPos;[m
+[31m-[m
+[31m-        vec3 shadowViewPosRaw  = (shadowModelView * vec4(shadowSamplePos, 1.0)).xyz;[m
+[31m-        vec4 shadowClipRaw     = shadowProjection * vec4(shadowViewPosRaw, 1.0);[m
+[31m-        float distortionFactor = length(shadowClipRaw.xy) + 0.1,[m
+[31m-              slope            = sqrt(saturate(1.0 - NdotL * NdotL)) / max(NdotL, 0.05),[m
+[31m-              normalBias       = (0.008 + 0.025 * clamp(distortionFactor, 0.0, 1.0)) * clamp(slope, 0.5, 3.0);[m
+[31m-[m
+[31m-        vec3 biasedPos       = shadowSamplePos + worldNormal * normalBias + lightPos * (normalBias * 0.5),[m
+[31m-             shadowViewPos   = (shadowModelView * vec4(biasedPos, 1.0)).xyz;[m
+[31m-        vec4 shadowClipPos   = shadowProjection * vec4(shadowViewPos, 1.0);[m
+[31m-[m
+[31m-        float distScale      = clamp(0.12 / distortionFactor, 0.08, 1.0);[m
+[31m-        shadowClipPos.xyz    = distortShadowClipPos(shadowClipPos.xyz);[m
+[31m-[m
+[31m-        vec3  shadowNdcPos    = shadowClipPos.xyz / shadowClipPos.w,[m
+[31m-              shadowScreenPos = shadowNdcPos * 0.5 + 0.5;[m
+[31m-        float receiverDepth   = shadowScreenPos.z;[m
+[31m-        vec2  shadowUv        = shadowScreenPos.xy;[m
+[31m-[m
+[31m-        float noise   = ign,[m
+[31m-              phi     = noise * 6.2831853;[m
+[31m-        vec2  phiDir  = vec2(cos(phi), sin(phi));[m
+[31m-[m
+[31m-        // (304) Variable Penumbra Shadow & Foliage Pseudo-SSS[m
+[31m-        const float FOLIAGE_SHADOW_RADIUS   = 0.0075,[m
+[31m-                    FOLIAGE_SHADOW_BIAS     = 0.0012,[m
+[31m-                    FOLIAGE_DENSITY         = 2.5,[m
+[31m-                    FOLIAGE_DIFFUSION       = 0.0035,[m
+[31m-                    FOLIAGE_MAX_DEPTH       = 3.0,[m
+[31m-                    FOLIAGE_SHADOW_FLOOR    = 0.12,[m
+[31m-                    FOLIAGE_AMBIENT_FILL    = 0.35,[m
+[31m-[m
+[31m-                    PLANT_SHADOW_BIAS       = 0.0009,[m
+[31m-                    PLANT_RECEIVE_GAP       = 0.15,[m
+[31m-                    PLANT_DENSITY           = 3.0,[m
+[31m-                    PLANT_SHADOW_FLOOR      = 0.40,[m
+[31m-                    PLANT_SOLID_FLOOR       = 0.04,[m
+[31m-                    PLANT_SOLID_START       = 0.50,[m
+[31m-                    PLANT_SOLID_END         = 1.20;[m
+[31m-[m
+[31m-        float shadow       = 1.0,[m
+[31m-              foliageDepth = 0.0;[m
+[31m-        vec3 glassTint = vec3(1.0);[m
+[31m-        if (sunLeakMask > 0.0 && shadowUv.x > 0.0 && shadowUv.x < 1.0 && shadowUv.y > 0.0 && shadowUv.y < 1.0 && receiverDepth > 0.0 && receiverDepth < 1.0) {[m
+[31m-            float blocksPerDepth = 2.0 * abs(shadowProjectionInverse[2][2]),[m
+[31m-                  softK          = (isLeaves != 0) ? FOLIAGE_DENSITY * blocksPerDepth[m
+[31m-                                  : (isFoliage != 0) ? PLANT_DENSITY * blocksPerDepth[m
+[31m-                                  : 0.0,[m
+[31m-                  blockerBias    = 0.0004 * distortionFactor,[m
+[31m-                  centerDepth    = textureLod(shadowtex1, shadowUv, 0.0).r;[m
+[31m-            bool  centerInShadow = (centerDepth < receiverDepth - blockerBias);[m
+[31m-[m
+[31m-            float pcfBias        = (isLeaves != 0) ? (FOLIAGE_SHADOW_BIAS * distortionFactor)[m
+[31m-                                  : (isFoliage != 0) ? (PLANT_SHADOW_BIAS * distortionFactor + PLANT_RECEIVE_GAP / blocksPerDepth)[m
+[31m-                                  : (0.0003 * distortionFactor),[m
+[31m-                  biasedReceiver = receiverDepth - pcfBias,[m
+[31m-                  filterRadius   = 0.0;[m
+[31m-            bool  skipPcf        = false;[m
+[31m-[m
+[31m-            if (isLeaves != 0) {[m
+[31m-                float depthBlocks = clamp((biasedReceiver - centerDepth) * blocksPerDepth, 0.0, FOLIAGE_MAX_DEPTH);[m
+[31m-                foliageDepth = 1.0 - exp(-0.8 * depthBlocks);[m
+[31m-                filterRadius = min((FOLIAGE_SHADOW_RADIUS + depthBlocks * FOLIAGE_DIFFUSION) * distScale, SHADOW_MAX_BLUR * distScale);[m
+[31m-            } else if (isFoliage != 0) {[m
+[31m-                float blockerDist = max(biasedReceiver - centerDepth, 0.0) * blocksPerDepth,[m
+[31m-                      plantFloor  = mix(PLANT_SHADOW_FLOOR, PLANT_SOLID_FLOOR, smoothstep(PLANT_SOLID_START, PLANT_SOLID_END, blockerDist));[m
+[31m-                shadow  = shadowTap(centerDepth, biasedReceiver, softK, plantFloor);[m
+[31m-                skipPcf = true;[m
+[31m-            } else {[m
+[31m-                float searchRadius = 0.012 * distScale,[m
+[31m-                      blockerSum   = centerInShadow ? centerDepth : 0.0,[m
+[31m-                      blockerCount = centerInShadow ? 1.0 : 0.0;[m
+[31m-[m
+[31m-                vec2 searchDir = phiDir;[m
+[31m-                for (int i = 0; i < 6; i++) {[m
+[31m-                    float r      = sqrt(float(i) + 0.5) * 0.4082;[m
+[31m-                    vec2  offset = searchDir * (r * searchRadius);[m
+[31m-                    searchDir    = GOLDEN_ROT * searchDir;[m
+[31m-[m
+[31m-                    float d = textureLod(shadowtex1, shadowUv + offset, 0.0).r;[m
+[31m-                    if (d < receiverDepth - blockerBias) {[m
+[31m-                        blockerSum += d;[m
+[31m-                        blockerCount += 1.0;[m
+[31m-                    }[m
+[31m-                }[m
+[31m-[m
+[31m-                if (blockerCount == 0.0) {[m
+[31m-                    shadow  = 1.0;[m
+[31m-                    skipPcf = true;[m
+[31m-                } else {[m
+[31m-                    float avgBlockerDepth = blockerSum / blockerCount;[m
+[31m-[m
+[31m-                    vec4 projReceiver = shadowProjectionInverse * vec4(0.0, 0.0, receiverDepth * 2.0 - 1.0, 1.0),[m
+[31m-                         projBlocker  = shadowProjectionInverse * vec4(0.0, 0.0, avgBlockerDepth * 2.0 - 1.0, 1.0);[m
+[31m-                    float zReceiver = projReceiver.z / projReceiver.w,[m
+[31m-                          zBlocker  = projBlocker.z / projBlocker.w;[m
+[31m-[m
+[31m-                    float separation       = abs(zReceiver - zBlocker),[m
+[31m-                          scaledSeparation = pow(separation, SHADOW_CONTACT_EXPONENT),[m
+[31m-                          penumbra         = (scaledSeparation * SHADOW_BLUR_SCALE) / (abs(zBlocker) + 0.001);[m
+[31m-                    filterRadius = min(penumbra * distScale, SHADOW_MAX_BLUR * distScale);[m
+[31m-                }[m
+[31m-            }[m
+[31m-[m
+[31m-            if (!skipPcf) {[m
+[31m-                float floorK = (isLeaves != 0) ? FOLIAGE_SHADOW_FLOOR : 0.0,[m
+[31m-                      centerVis = (isLeaves != 0) ? shadowTap(centerDepth, biasedReceiver, softK, floorK) : (centerInShadow ? 0.0 : 1.0);[m
+[31m-[m
+[31m-                float earlyShadowSum = 0.0;[m
+[31m-                vec2 ringDir = phiDir;[m
+[31m-                for (int i = 0; i < 4; i++) {[m
+[31m-                    vec2  offset = ringDir * filterRadius;[m
+[31m-                    ringDir      = vec2(-ringDir.y, ringDir.x);[m
+[31m-                    float d = textureLod(shadowtex1, shadowUv + offset, 0.0).r;[m
+[31m-                    earlyShadowSum += shadowTap(d, biasedReceiver, softK, floorK);[m
+[31m-                }[m
+[31m-[m
+[31m-                if (earlyShadowSum == 0.0 && centerInShadow && filterRadius < 0.008 && isFoliage == 0) shadow = 0.0;[m
+[31m-                else if (earlyShadowSum > 3.99 && centerVis > 0.99) shadow = 1.0;[m
+[31m-                else {[m
+[31m-                    const float RING_W = 0.4;[m
+[31m-                    float shadowSum = earlyShadowSum * RING_W + centerVis,[m
+[31m-                          weightSum = 4.0 * RING_W + 1.0;[m
+[31m-                    vec2 diskDir = GOLDEN_ROT4 * phiDir;[m
+[31m-                    for (int i = 0; i < 12; i++) {[m
+[31m-                        float r      = sqrt(float(i + 4) + 0.5) * 0.25;[m
+[31m-                        vec2  offset = diskDir * (r * filterRadius);[m
+[31m-                        diskDir      = GOLDEN_ROT * diskDir;[m
+[31m-[m
+[31m-                        float d = textureLod(shadowtex1, shadowUv + offset, 0.0).r,[m
+[31m-                            w = 1.0 - 0.6 * r * r;[m
+[31m-                        shadowSum += w * shadowTap(d, biasedReceiver, softK, floorK);[m
+[31m-                        weightSum += w;[m
+[31m-                    }[m
+[31m-                    shadow = shadowSum / weightSum;[m
+[31m-[m
+[31m-                    //if (isFoliage != 0) shadow *= 3.14;[m
+[31m-                }[m
+[31m-            }[m
+[31m-[m
+[31m-            float shadowEdge = max(abs(shadowNdcPos.x), abs(shadowNdcPos.y)),[m
+[31m-                  shadowFade = smoothstep(0.985, 0.999, shadowEdge);[m
+[31m-            shadow = mix(shadow, 1.0, shadowFade) * smoothstep(0.0, 0.2, lightPos.y);[m
+[31m-            //shadow = 1.;[m
+[31m-            foliageDepth *= 1.0 - shadowFade;[m
+[31m-[m
+[31m-            const int   TINT_TAPS   = 8;[m
+[31m-            const float TINT_RADIUS = 0.004;[m
+[31m-            const float TINT_POWER  = 2.0;[m
+[31m-[m
+[31m-            vec3 tintSum = vec3(0.0);[m
+[31m-            vec2 tintDir = phiDir;[m
+[31m-            for (int i = 0; i < TINT_TAPS; i++) {[m
+[31m-                float r     = sqrt((float(i) + 0.5) / float(TINT_TAPS));[m
+[31m-                vec2  uv    = shadowUv + tintDir * (r * TINT_RADIUS * distScale);[m
+[31m-                tintDir     = GOLDEN_ROT * tintDir;[m
+[31m-[m
+[31m-                float dAll = textureLod(shadowtex0, uv, 0.0).r;[m
+[31m-                float dOpq = textureLod(shadowtex1, uv, 0.0).r;[m
+[31m-[m
+[31m-                bool glassBlocks = (dAll < dOpq - 1e-5) && (dAll < biasedReceiver - blockerBias);[m
+[31m-[m
+[31m-                vec3 tint = vec3(1.0);[m
+[31m-                if (glassBlocks) {[m
+[31m-                    vec4 c = textureLod(shadowcolor0, uv, 0.0);[m
+[31m-                    tint = pow(mix(vec3(1.0), c.rgb, c.a), vec3(TINT_POWER));[m
+[31m-                }[m
+[31m-                tintSum += tint;[m
+[31m-            }[m
+[31m-            glassTint = mix(tintSum / float(TINT_TAPS), vec3(1.0), shadowFade);[m
+[31m-        }[m
+[31m-[m
+[31m-        const float DH_FAKE_SHADOW_START = 0.9,[m
+[31m-                    DH_FAKE_SHADOW_END   = 0.95,[m
+[31m-                    DH_FAKE_SHADOW_FLOOR = 0.0;[m
+[31m-[m
+[31m-        if (isDhTerrain) {[m
+[31m-            float dhLit = smoothstep(DH_FAKE_SHADOW_START, DH_FAKE_SHADOW_END, skyLightMap);[m
+[31m-            shadow       = min(shadow, mix(DH_FAKE_SHADOW_FLOOR, 1.0, dhLit)) * smoothstep(0.0, 0.2, lightPos.y);[m
+[31m-            foliageDepth = max(foliageDepth, 1.0 - dhLit);[m
+[31m-        }[m
+[31m-[m
+[31m-        // (304c) Thin-Plant Smooth Self-Shade[m
+[31m-        float plantSelf = 1.0;[m
+[31m-        if (isFoliage != 0 && isLeaves == 0 && isCloth == 0) {[m
+[31m-            const float PLANT_CLUMP_TOP    = 0.90,[m
+[31m-                        PLANT_CLUMP_RADIUS = 0.55,[m
+[31m-                        PLANT_SELF_DENSITY = 2.6,[m
+[31m-                        PLANT_SELF_MIN     = 0.15,[m
+[31m-                        PLANT_BACK_RANGE   = 0.30,[m
+[31m-                        PLANT_UPPER_FADE   = 0.35;[m
+[31m-[m
+[31m-            vec2  lightXZ  = lightPos.xz,[m
+[31m-                  faceDir  = -footPlayerPos.xz * inversesqrt(max(dot(footPlayerPos.xz, footPlayerPos.xz), 1e-4));[m
+[31m-            float backFace = smoothstep(0.0, PLANT_BACK_RANGE, -dot(faceDir, lightXZ));[m
+[31m-[m
+[31m-            if (backFace > 0.0) {[m
+[31m-                vec3  plantWorldPos = cameraPosition + footPlayerPos;[m
+[31m-                bool  isUpper       = (foliageCode == 4);[m
+[31m-                vec2  clumpUv       = 0.5 * sin(plantWorldPos.xz * 5.0 + 1.6 * sin(plantWorldPos.zx * 3.1));[m
+[31m-                float plantY        = fract(plantWorldPos.y + 0.02),[m
+[31m-                      clumpH        = isUpper ? 1.0 + plantY : plantY,[m
+[31m-                      clumpTop      = isUpper ? 1.0 + PLANT_CLUMP_TOP : PLANT_CLUMP_TOP,[m
+[31m-                      invExitY      = max(lightPos.y, 0.0) / max(clumpTop - clumpH, 0.02);[m
+[31m-                vec2  invExitXZ     = abs(lightXZ) / max(PLANT_CLUMP_RADIUS - clumpUv * sign(lightXZ), 0.02),[m
+[31m-                      exitSq        = invExitXZ * invExitXZ;[m
+[31m-                float invExit4      = dot(exitSq, exitSq) + sq(sq(invExitY)),[m
+[31m-                      pathLen       = inversesqrt(sqrt(max(invExit4, 1e-6)));[m
+[31m-[m
+[31m-                plantSelf = mix(1.0, mix(PLANT_SELF_MIN, 1.0, exp(-PLANT_SELF_DENSITY * pathLen)), backFace);[m
+[31m-                if (isUpper) plantSelf = mix(1.0, plantSelf, smoothstep(0.0, PLANT_UPPER_FADE, plantY));[m
+[31m-            }[m
+[31m-        }[m
+[31m-        shadow      *= plantSelf;[m
+[31m-        foliageDepth = max(foliageDepth, 1.0 - plantSelf);[m
+[31m-[m
+[31m-        // (304d) Underwater Lighting[m
+[31m-        if (isEyeInWater == 1) {[m
+[31m-            float uwDepth   = uwDepthAt(fragWorldPos.y, eyeCameraPos.y, uwEyeDepth());[m
+[31m-            vec2  causticXZ = fragWorldPos.xz - keyDir.xz / max(keyDir.y, 0.3) * uwDepth;[m
+[31m-            float caustic   = mix(0.45, 1.6, pow(uwCausticRidge(causticXZ, frameTimeCounter), 3.0));[m
+[31m-            shadow         *= mix(1.0, caustic, UW_CAUSTIC_STRENGTH * exp(-UW_CAUSTIC_FADE * uwDepth));[m
+[31m-            uwLightTint     = exp(-mix(UW_AMBIENT_EXT, UW_LIGHT_EXT, 0.6) * uwDepth);[m
+[31m-        }[m
+[31m-[m
+[31m-        // (305) Foliage Canopy Sunlit Tinting[m
+[31m-        const float FOLIAGE_DEEP_TINT = 1.0;[m
+[31m-[m
+[31m-        vec3 sunLight = sunlightC * shadow;[m
+[31m-        if (isFoliage != 0) {[m
+[31m-            vec3 leafHue = normalize(albedo.rgb + 1e-4) * 1.7320508;[m
+[31m-            sunLight *= mix(vec3(1.0), leafHue, foliageDepth * FOLIAGE_DEEP_TINT);[m
+[31m-        }[m
+[31m-[m
+[31m-        // (306) Environmental Irradiance & Ambient Assembly[m
+[31m-        const float SSGI_INTENSITY = 0.06;[m
+[31m-[m
+[31m-        float rawSkyFactor    = worldNormal.y * 0.5 + 0.5,[m
+[31m-              skyWeight       = smoothstep(0.20, 0.85, rawSkyFactor),[m
+[31m-              sunSkyHaze      = NdotL * NdotL,[m
+[31m-              finalVisibility = ((isFoliage == 1) ? mix(visibility, 1.0, 0.42) : visibility) * mix(1.0, plantSelf, PLANT_SELF_AO);[m
+[31m-[m
+[31m-        vec3 localSky              = mix(ambientC, SUN_HAZE_COLOR, sunSkyHaze * 0.45 * ((NIGHT_WARM_HAZE != 0) ? 1.0 : 1.0 - nightP.x)),[m
+[31m-             ambientDome           = mix(GROUND_AMBIENT_COLOR, localSky, skyWeight),[m
+[31m-             environmentIrradiance = ambientDome * (skyLightMap * skyLightMap * sqrt(skyLightMap)),[m
+[31m-             caveFloorIrradiance   = vec3(0.08, 0.09, 0.12) * (CAVE_MIN_LIGHT * 50.0),[m
+[31m-             indirectBounce        = rsmRadiance * SSGI_INTENSITY * mix(0.7, 1.0, visibility) * smoothstep(0.2, 0.4, sunDir.y),[m
+[31m-             skyIrradiance         = (environmentIrradiance + caveFloorIrradiance) * AMBIENT_INTENSITY + indirectBounce,[m
+[31m-             skyReflection         = mix(GROUND_AMBIENT_COLOR, localSky, skyWeight) * skyLightMap;[m
+[31m-[m
+[31m-        vec3  reflectDir   = reflect(-viewDir, worldNormal);[m
+[31m-        float reflectUp    = saturate(reflectDir.y),[m
+[31m-              horizonScale = clamp(dot(ambientC, vec3(0.3333)) / max(dot(mix(horizonC, skyC, 0.5), vec3(0.3333)), 1e-4), 0.5, 1.5);[m
+[31m-        vec3  skyAtReflect = mix(horizonC, skyC, sqrt(reflectUp)) * horizonScale;[m
+[31m-        skyReflection      = mix(GROUND_AMBIENT_COLOR, skyAtReflect, smoothstep(-0.15, 0.35, reflectDir.y)) * skyLightMap;[m
+[31m-[m
+[31m-        // (307) Foliage & Plant Canopy Shading[m
+[31m-        if (isFoliage != 0) {[m
+[31m-            if (isLeaves != 0) {[m
+[31m-                const float FOLIAGE_SUN_POWER            = 1.05,[m
+[31m-                            FOLIAGE_WRAP_AMOUNT          = 0.2,[m
+[31m-                            FOLIAGE_NOON_SQUASH          = 0.0,[m
+[31m-                            FOLIAGE_MIE_STRENGTH         = 4.50,[m
+[31m-                            FOLIAGE_MIE_G                = 0.55,[m
+[31m-                            FOLIAGE_MS_WEIGHT            = 0.0,[m
+[31m-                            FOLIAGE_DEEP_TINT            = 0.70,[m
+[31m-                            FOLIAGE_TWO_SIDED            = 0.5,[m
+[31m-                            FOLIAGE_NOON_START           = 0.5,[m
+[31m-                            FOLIAGE_NOON_SSS_FADE        = 0.7,[m
+[31m-                            FOLIAGE_NOON_SHADOW_CONTRAST = 1.5,[m
+[31m-                            FOLIAGE_SHADOW_FLOOR_MIE     = 0.12,[m
+[31m-                            FOLIAGE_MIE_EDGE_POWER       = 2.0;[m
+[31m-[m
+[31m-                const vec3 FOLIAGE_TRANSMIT_TINT = vec3(1.30, 1.50, 0.35);[m
+[31m-[m
+[31m-                float noLRaw        = dot(worldNormal, lightPos),[m
+[31m-                      foliageNoL = mix(max(noLRaw, 0.0), abs(noLRaw), FOLIAGE_TWO_SIDED),[m
+[31m-                      directNoL     = clamp(foliageNoL * (1.0 - FOLIAGE_WRAP_AMOUNT) + FOLIAGE_WRAP_AMOUNT, 0.0, 1.0),[m
+[31m-                      noonZenith    = clamp(lightPos.y, 0.0, 1.0),[m
+[31m-                      noonDampen    = 1.0 - (noonZenith * FOLIAGE_NOON_SQUASH * (1.0 - max(foliageNoL, 0.0) * 0.25)),[m
+[31m-                      noonWeight    = smoothstep(FOLIAGE_NOON_START, 1.0, noonZenith),[m
+[31m-                      noonShadow    = pow(shadow, 1.0 + noonWeight * FOLIAGE_NOON_SHADOW_CONTRAST),[m
+[31m-                      sssElevation  = 1.0 - noonWeight * FOLIAGE_NOON_SSS_FADE,[m
+[31m-                      leafLuma      = dot(mat.albedo, vec3(0.2126, 0.7152, 0.0722)),[m
+[31m-                      cosTheta      = -dot(viewDir, lightPos),[m
+[31m-                      g2            = FOLIAGE_MIE_G * FOLIAGE_MIE_G,[m
+[31m-                      miePhase      = pow15((1.0 - FOLIAGE_MIE_G) * (1.0 - FOLIAGE_MIE_G) / (1.0 + g2 - 2.0 * FOLIAGE_MIE_G * cosTheta)) * FOLIAGE_MIE_STRENGTH,[m
+[31m-                      backFace      = clamp(-noLRaw, 0.0, 1.0),[m
+[31m-                      edgeBase      = 1.0 - abs(dot(viewDir, worldNormal)),[m
+[31m-                      rim           = cube(edgeBase),[m
+[31m-                      sssCanopyMask = smoothstep(0.70, 0.98, skyLightMap),[m
+[31m-                      sssShadow     = mix(noonShadow, sqrt(sqrt(noonShadow)), FOLIAGE_MS_WEIGHT),[m
+[31m-                      mieShadow     = sq(saturate((noonShadow - FOLIAGE_SHADOW_FLOOR_MIE) / (1.0 - FOLIAGE_SHADOW_FLOOR_MIE))) * (1.0 - foliageDepth),[m
+[31m-                      mieEdge       = pow(edgeBase, FOLIAGE_MIE_EDGE_POWER);[m
+[31m-[m
+[31m-                vec3 leafChroma   = mat.albedo / max(leafLuma, 1e-4),[m
+[31m-                     depthTint    = mix(vec3(1.0), leafChroma, foliageDepth * FOLIAGE_DEEP_TINT),[m
+[31m-                     diffuseLight = mat.albedo * sunlightC * depthTint * (directNoL * noonShadow * sunLeakMask * FOLIAGE_SUN_POWER * noonDampen),[m
+[31m-                     sssTint      = mat.albedo * FOLIAGE_TRANSMIT_TINT * depthTint,[m
+[31m-                     foliageSss   = sssTint * sunlightC * (rim * (0.25 * sssShadow + miePhase * mieShadow * mieEdge) * sssCanopyMask * sunLeakMask * sssElevation);[m
+[31m-[m
+[31m-                vec3 ambientLighting = shadeAmbient(mat, worldNormal, viewDir, skyIrradiance, skyReflection, finalVisibility),[m
+[31m-                     selfEmission    = mat.albedo * mat.emissive * 5.0;[m
+[31m-[m
+[31m-                finalColor = diffuseLight + foliageSss + ambientLighting + selfEmission;[m
+[31m-                if(isDhTerrain) finalColor = diffuseLight + foliageSss + ambientLighting;[m
+[31m-            } else {[m
+[31m-                const float PLANT_WRAP_AMOUNT    = 0.35,[m
+[31m-                            PLANT_THICKNESS      = 0.05,[m
+[31m-                            PLANT_MFP_SCALE      = 0.12,[m
+[31m-                            PLANT_TRANSMIT_POWER = 0.6,[m
+[31m-                            PLANT_RIM_SHARPNESS  = 2.0;[m
+[31m-[m
+[31m-                float NoL       = dot(worldNormal, lightPos),[m
+[31m-                      directNoL = clamp(NoL * (1.0 - PLANT_WRAP_AMOUNT) + PLANT_WRAP_AMOUNT, 0.0, 1.0),[m
+[31m-                      grazing   = pow(1.0 - max(dot(worldNormal, viewDir), 0.0), PLANT_RIM_SHARPNESS);[m
+[31m-[m
+[31m-                vec3 diffuseLight    = mat.albedo * sunlightC * directNoL * shadow * sunLeakMask,[m
+[31m-                     plantMfp        = PLANT_MFP_SCALE * (0.15 + mat.albedo),[m
+[31m-                     transmit        = burleyTransmittance(mat.albedo, plantMfp, PLANT_THICKNESS)[m
+[31m-                                       * saturate(-NoL) * mix(0.25, 1.0, grazing) * PLANT_TRANSMIT_POWER[m
+[31m-                                       * sunlightC * shadow * sunLeakMask,[m
+[31m-                     ambientLighting = shadeAmbient(mat, worldNormal, viewDir, skyIrradiance, skyReflection, finalVisibility),[m
+[31m-                     selfEmission    = mat.albedo * mat.emissive * 5.0;[m
+[31m-[m
+[31m-                finalColor = diffuseLight + transmit + ambientLighting + selfEmission;[m
+[31m-            }[m
+[31m-            finalColor *= 0.3183 * glassTint;[m
+[31m-        } else {[m
+[31m-            // (308) Standard Terrain PBR Surface Shading[m
+[31m-            float sunContactAo   = mix(0.0, 1.0, visibility);[m
+[31m-            vec3  sunIlluminance = sunlightC * sunLeakMask * sunContactAo * glassTint,[m
+[31m-                  sunSpecular    = keySpecC * sunLeakMask * glassTint;[m
+[31m-[m
+[31m-            finalColor = PBRModule([m
+[31m-                mat, worldNormal, viewDir, lightPos,[m
+[31m-                sunIlluminance, sunSpecular, shadow,[m
+[31m-                skyIrradiance, skyReflection, finalVisibility,[m
+[31m-                5.0[m
+[31m-            );[m
+[31m-[m
+[31m-            /*[m
+[31m-            const float SSS_MFP_SCALE = 0.25,[m
+[31m-                        SSS_STRENGTH  = 1.0;[m
+[31m-[m
+[31m-            if (mat.sss > 0.0) {[m
+[31m-                vec3 mfp = SSS_MFP_SCALE * mat.sss * (0.15 + mat.albedo);[m
+[31m-[m
+[31m-                vec3 inwardShadowPos = getShadowCoord(worldPos - worldNormal * 0.05);[m
+[31m-                float thickness      = sssThickness(inwardShadowPos);[m
+[31m-[m
+[31m-                finalColor += SSS_STRENGTH * sssTransmission(worldNormal, lightPos, mat.albedo, mfp, thickness, sunlightC * sunLeakMask);[m
+[31m-            }[m
+[31m-            */[m
+[31m-        }[m
+[31m-    }[m
+[31m-    finalColor *= uwLightTint;[m
+[31m-    float fogDither   = ign,[m
+[31m-              skyExposure = mix(FOG_CAVE_FLOOR, 1.0, saturate(float(eyeBrightnessSmooth.y) / 240.0));[m
+[31m-        vec3  fogStart    = gbufferModelViewInverse[3].xyz,[m
+[31m-              fogDir      = normalize(footPlayerPos - fogStart),[m
+[31m-              fogEnd      = isSky ? fogStart + fogDir * FOG_SKY_DIST : footPlayerPos;[m
+[31m-        finalColor = applyFog(finalColor, fogStart, fogEnd, fogDither, skyExposure, keyDir, keyDiscC * ((NIGHT_MOON_FOG_SHAFTS != 0) ? 1.0 : 1.0 - nightP.x), ambientC, isSky);[m
+[31m-[m
+[31m-    // (400) Output Buffer Assignment[m
+[31m-    outColor   = vec4(finalColor, 1.0);[m
+[31m-    outReflect = isGlossy ? vec4(mat.F0, mat.pRough) : vec4(0.0);[m
+[31m-}[m
+\ No newline at end of file[m
+[1mdiff --git a/shaders/dh_terrain.fsh b/shaders/dh_terrain.fsh[m
+[1mindex b64b0e2..64ec37d 100644[m
+[1m--- a/shaders/dh_terrain.fsh[m
+[1m+++ b/shaders/dh_terrain.fsh[m
+[36m@@ -5,7 +5,6 @@[m
+ #include "/libs/mathUtils.glsl"[m
+ [m
+ const int TYPE = 2;[m
+[31m-uniform mat4 gbufferModelViewInverse;[m
+ uniform float viewWidth, viewHeight;[m
+ uniform sampler2D depthtex0;[m
+ uniform float far;[m
+[36m@@ -21,7 +20,7 @@[m [mlayout(location = 1) out vec4 outNormal;[m
+ layout(location = 2) out vec4 outPBR;[m
+ [m
+ in vec4 fColor;[m
+[31m-in vec3 normalMap;[m
+[32m+[m[32min vec3 worldN;[m
+ in vec2 lightCoord;[m
+ in vec3 worldPos;[m
+ flat in int isLeaves;[m
+[36m@@ -38,15 +37,14 @@[m [mvoid main() {[m
+     if (dhFadeDist < getIGN(gl_FragCoord.xy)) discard;[m
+ [m
+     vec3 baseColor = fColor.rgb;[m
+[32m+[m[32m    vec3 worldNormal = normalize(worldN);[m
+     #if DH_FACE_SHADE[m
+[31m-        vec3  cubeN     = abs(normalize(mat3(gbufferModelViewInverse) * normalMap));[m
+[31m-        float faceShade = dot(cubeN * cubeN, vec3(0.6, (mat3(gbufferModelViewInverse) * normalMap).y > 0.0 ? 1.0 : 0.5, 0.8));[m
+[32m+[m[32m        vec3  cubeN     = abs(worldNormal);[m
+[32m+[m[32m        float faceShade = dot(cubeN * cubeN, vec3(0.6, worldN.y > 0.0 ? 1.0 : 0.5, 0.8));[m
+         baseColor *= faceShade;[m
+     #endif[m
+     vec3 albedo = pow_linear(baseColor);[m
+ [m
+[31m-    vec3 worldNormal = normalize(mat3(gbufferModelViewInverse) * normalMap);[m
+[31m-[m
+     if (isLeaves != 0) {[m
+         vec3 absPos     = worldPos + cameraPosition,[m
+              p1         = absPos * 0.15,[m
+[1mdiff --git a/shaders/dh_terrain.vsh b/shaders/dh_terrain.vsh[m
+[1mindex 5a266d8..7cab57e 100644[m
+[1m--- a/shaders/dh_terrain.vsh[m
+[1m+++ b/shaders/dh_terrain.vsh[m
+[36m@@ -4,7 +4,7 @@[m [muniform vec3 cameraPosition;[m
+ uniform mat4 gbufferModelViewInverse, dhProjection;[m
+ [m
+ out vec4 fColor;[m
+[31m-out vec3 normalMap;[m
+[32m+[m[32mout vec3 worldN;[m
+ out vec2 lightCoord;[m
+ out vec3 worldPos;[m
+ flat out int isLeaves;[m
+[36m@@ -15,7 +15,7 @@[m [mvec3 transform(mat4 m, vec3 pos) {[m
+ [m
+ void main() {[m
+     fColor = gl_Color;[m
+[31m-    normalMap = gl_NormalMatrix * gl_Normal;[m
+[32m+[m[32m    worldN = mat3(gbufferModelViewInverse) * (gl_NormalMatrix * gl_Normal);[m
+     lightCoord = clamp(((gl_TextureMatrix[1] * gl_MultiTexCoord1).xy - 1.0 / 32.0) * (32.0 / 30.0), 0., 1.);[m
+     isLeaves   = (dhMaterialId == DH_BLOCK_LEAVES) ? 1 : 0;[m
+     vec3 cameraOffset = fract(cameraPosition);[m
+[1mdiff --git a/shaders/final.fsh b/shaders/final.fsh[m
+[1mindex 67db07d..7daff0f 100644[m
+[1m--- a/shaders/final.fsh[m
+[1m+++ b/shaders/final.fsh[m
+[36m@@ -3,10 +3,10 @@[m
+ #include "/libs/mathUtils.glsl"[m
+ #include "/libs/coreFunctions/bloomKawase.glsl"[m
+ [m
+[31m-uniform sampler2D colortex0, colortex7, colortex11;[m
+[32m+[m[32muniform sampler2D colortex0, colortex7;[m
+ uniform float viewWidth, viewHeight;[m
+[31m-uniform int   isEyeInWater;[m
+ in vec2 texCoord;[m
+[32m+[m[32mflat in float exposure, bloomK;[m
+ layout(location = 0) out vec4 fragColor;[m
+ [m
+ // (200) Color-related Utilities[m
+[36m@@ -49,15 +49,7 @@[m [mvec3 uchimura(vec3 x) {[m
+ #define AGX_SHADOW_LIFT 0.001 [m
+ [m
+ vec3 agxDefaultContrastApprox(vec3 x) {[m
+[31m-    vec3 x2 = x * x;[m
+[31m-    vec3 x4 = x2 * x2;[m
+[31m-    [m
+[31m-    vec3 val = + 15.5 * x4 * x2[m
+[31m-               - 40.14 * x4 * x[m
+[31m-               + 31.96 * x4[m
+[31m-               - 6.868 * x2 * x[m
+[31m-               + 0.4298 * x2[m
+[31m-               + 0.1191 * x;[m
+[32m+[m[32m    vec3 val = x * (0.1191 + x * (0.4298 + x * (-6.868 + x * (31.96 + x * (-40.14 + x * 15.5)))));[m
+ [m
+     return max(val, 0.0);[m
+ }[m
+[36m@@ -101,13 +93,7 @@[m [mvec3 crystalineCG(vec3 color) {[m
+ void main() {[m
+     vec3 color = texture(colortex0, texCoord).rgb;[m
+ [m
+[31m-    float smoothedLuma = texelFetch(colortex11, ivec2(0), 0).r;[m
+[31m-    [m
+[31m-    float exposure = exposureFromLuma(smoothedLuma);[m
+[31m-[m
+[31m-    float bloomK = BLOOM_STRENGTH * clamp(pow(exposure / BLOOM_GLARE_REF, BLOOM_GLARE_POWER), 1.0 / BLOOM_GLARE_MAX, BLOOM_GLARE_MAX)[m
+[31m-                 * ((isEyeInWater == 1) ? BLOOM_UNDERWATER : 1.0);[m
+[31m-    color = mix(color, bloomBilinear(colortex7, texCoord).rgb, saturate(bloomK));[m
+[32m+[m[32m    color = mix(color, bloomBilinear(colortex7, texCoord).rgb, bloomK);[m
+ [m
+     color *= exposure;[m
+     color = mix(vec3(dot(color, LUMA_COEFF)), color, 0.95);[m
+[1mdiff --git a/shaders/final.vsh b/shaders/final.vsh[m
+[1mindex f99a08c..09dc71a 100644[m
+[1m--- a/shaders/final.vsh[m
+[1m+++ b/shaders/final.vsh[m
+[36m@@ -1,8 +1,20 @@[m
+ #version 460 compatibility[m
+ [m
+[32m+[m[32m#include "/libs/mathUtils.glsl"[m
+[32m+[m[32m#include "/libs/coreFunctions/bloomKawase.glsl"[m
+[32m+[m
+[32m+[m[32muniform sampler2D colortex11;[m
+[32m+[m[32muniform int isEyeInWater;[m
+[32m+[m
+ out vec2 texCoord;[m
+[32m+[m[32mflat out float exposure, bloomK;[m
+ [m
+ void main() {[m
+     gl_Position = ftransform();[m
+     texCoord = gl_MultiTexCoord0.st;[m
+[31m-}[m
+\ No newline at end of file[m
+[32m+[m
+[32m+[m[32m    // (001) Adapted Exposure & Bloom Mix (per-frame, read from the exposure texel)[m
+[32m+[m[32m    exposure = exposureFromLuma(texelFetch(colortex11, ivec2(0), 0).r);[m
+[32m+[m[32m    bloomK   = saturate(BLOOM_STRENGTH * clamp(pow(exposure / BLOOM_GLARE_REF, BLOOM_GLARE_POWER), 1.0 / BLOOM_GLARE_MAX, BLOOM_GLARE_MAX)[m
+[32m+[m[32m                      * ((isEyeInWater == 1) ? BLOOM_UNDERWATER : 1.0));[m
+[32m+[m[32m}[m
+[1mdiff --git a/shaders/libs/buffersShared/gEntityF.glsl b/shaders/libs/buffersShared/gEntityF.glsl[m
+[1mindex 8f35504..d3a82e7 100644[m
+[1m--- a/shaders/libs/buffersShared/gEntityF.glsl[m
+[1m+++ b/shaders/libs/buffersShared/gEntityF.glsl[m
+[36m@@ -3,7 +3,6 @@[m
+ #include "/libs/labPBR.glsl"[m
+ #include "/libs/mathUtils.glsl"[m
+ uniform sampler2D gtexture, specular;[m
+[31m-uniform mat4 gbufferModelViewInverse;[m
+ uniform vec4 entityColor;[m
+ [m
+ /* DRAWBUFFERS:012 */[m
+[36m@@ -11,7 +10,7 @@[m [mlayout(location = 0) out vec4 outColor;[m
+ layout(location = 1) out vec4 outNormal;[m
+ layout(location = 2) out vec4 outPBR;[m
+ [m
+[31m-in vec3 fColor, normalMap;[m
+[32m+[m[32min vec3 fColor, worldN;[m
+ flat in int isCloth;[m
+ in vec2 texCoord, lightCoord;[m
+ [m
+[36m@@ -23,7 +22,7 @@[m [mvoid main() {[m
+     albedo = mix(albedo, entityColor.rgb, entityColor.a);[m
+     albedo = pow_linear(albedo);[m
+ [m
+[31m-    vec3 worldNormal = normalize(mat3(gbufferModelViewInverse) * normalMap);[m
+[32m+[m[32m    vec3 worldNormal = normalize(worldN);[m
+     if (!gl_FrontFacing) worldNormal = -worldNormal;[m
+ [m
+     // (000) Specular Data[m
+[1mdiff --git a/shaders/libs/buffersShared/gEntityV.glsl b/shaders/libs/buffersShared/gEntityV.glsl[m
+[1mindex 2737529..18f581a 100644[m
+[1m--- a/shaders/libs/buffersShared/gEntityV.glsl[m
+[1m+++ b/shaders/libs/buffersShared/gEntityV.glsl[m
+[36m@@ -7,14 +7,15 @@[m [muniform int  blockEntityId;[m
+ uniform mat3 normalMatrix;[m
+ uniform mat4 modelViewMatrix;[m
+ uniform mat4 projectionMatrix;[m
+[32m+[m[32muniform mat4 gbufferModelViewInverse;[m
+ [m
+[31m-out vec3 fColor, normalMap;[m
+[32m+[m[32mout vec3 fColor, worldN;[m
+ flat out int isCloth;[m
+ out vec2 texCoord, lightCoord;[m
+ [m
+ void main() {[m
+     isCloth = (blockEntityId == 300) ? 1 : 0;[m
+[31m-    normalMap = normalMatrix * vaNormal; texCoord = vaUV0; fColor = vaColor.rgb;[m
+[32m+[m[32m    worldN = mat3(gbufferModelViewInverse) * (normalMatrix * vaNormal); texCoord = vaUV0; fColor = vaColor.rgb;[m
+     lightCoord = vaUV2 * 3.9e-3 + 3.125e-2;[m
+     gl_Position = projectionMatrix * modelViewMatrix * vec4(vaPosition, 1.0);[m
+ }[m
+[1mdiff --git a/shaders/libs/buffersShared/gTerrainF.glsl b/shaders/libs/buffersShared/gTerrainF.glsl[m
+[1mindex 0792734..9e614e7 100644[m
+[1m--- a/shaders/libs/buffersShared/gTerrainF.glsl[m
+[1m+++ b/shaders/libs/buffersShared/gTerrainF.glsl[m
+[36m@@ -5,7 +5,6 @@[m
+ #include "/libs/mathUtils.glsl"[m
+ uniform sampler2D gtexture;[m
+ uniform sampler2D normals, specular;[m
+[31m-uniform mat4 gbufferModelViewInverse;[m
+ [m
+ /* DRAWBUFFERS:012 */[m
+ layout(location = 0) out vec4 outColor;[m
+[36m@@ -14,7 +13,7 @@[m [mlayout(location = 2) out vec4 outPBR;[m
+ [m
+ in vec3 fColor;[m
+ flat in int isFoliage, isLeaves, isTallTop;[m
+[31m-in vec3 normalMap;[m
+[32m+[m[32min vec3 worldN;[m
+ in vec4 tangentData;[m
+ in vec2 texCoord, lightCoord;[m
+ in vec3 clumpN;[m
+[36m@@ -32,8 +31,8 @@[m [mvoid main() {[m
+     vec3 albedo = pow_linear(rawTexture.rgb * fColor);[m
+ [m
+     // (000) World Space Normal[m
+[31m-    vec3 cubeNormal   = mat3(gbufferModelViewInverse) * normalMap,[m
+[31m-         worldTangent = mat3(gbufferModelViewInverse) * tangentData.xyz;[m
+[32m+[m[32m    vec3 cubeNormal   = worldN,[m
+[32m+[m[32m         worldTangent = tangentData.xyz;[m
+     mat3 TBN = tbnNormalTangent(cubeNormal, worldTangent);[m
+ [m
+     vec3 worldNormal;[m
+[1mdiff --git a/shaders/libs/buffersShared/gTerrainV.glsl b/shaders/libs/buffersShared/gTerrainV.glsl[m
+[1mindex 4ef3f59..19b7cbf 100644[m
+[1m--- a/shaders/libs/buffersShared/gTerrainV.glsl[m
+[1m+++ b/shaders/libs/buffersShared/gTerrainV.glsl[m
+[36m@@ -8,11 +8,12 @@[m [muniform vec3 chunkOffset;[m
+ uniform mat3 normalMatrix;[m
+ uniform vec3 cameraPosition;[m
+ uniform mat4 modelViewMatrix;[m
+[32m+[m[32muniform mat4 gbufferModelViewInverse;[m
+ uniform mat4 projectionMatrix;[m
+ [m
+ out vec3 fColor;[m
+ flat out int isFoliage, isLeaves, isTallTop;[m
+[31m-out vec3 normalMap;[m
+[32m+[m[32mout vec3 worldN;[m
+ out vec4 tangentData;[m
+ out vec2 texCoord, lightCoord;[m
+ out vec3 clumpN;[m
+[36m@@ -25,8 +26,9 @@[m [mvoid main() {[m
+         isFoliage = 1;[m
+     }[m
+ [m
+[31m-    tangentData = vec4(normalize(normalMatrix * at_tangent.xyz), at_tangent.w);[m
+[31m-    normalMap = normalMatrix * vaNormal;[m
+[32m+[m[32m    mat3 viewToWorld = mat3(gbufferModelViewInverse);[m
+[32m+[m[32m    tangentData = vec4(viewToWorld * normalize(normalMatrix * at_tangent.xyz), at_tangent.w);[m
+[32m+[m[32m    worldN = viewToWorld * (normalMatrix * vaNormal);[m
+     texCoord = vaUV0; [m
+     fColor = vaColor.rgb; [m
+     lightCoord = vaUV2 * 3.9e-3 + 3.125e-2;[m
+[1mdiff --git a/shaders/libs/buffersShared/skyVertex.glsl b/shaders/libs/buffersShared/skyVertex.glsl[m
+[1mindex 95e5371..e918399 100644[m
+[1m--- a/shaders/libs/buffersShared/skyVertex.glsl[m
+[1m+++ b/shaders/libs/buffersShared/skyVertex.glsl[m
+[36m@@ -1,19 +1,35 @@[m
+ #version 460 compatibility[m
+ [m
+ uniform vec3 sunPosition, shadowLightPosition;[m
+[31m-uniform mat4 gbufferModelViewInverse;[m
+[32m+[m[32muniform mat4 gbufferModelViewInverse, gbufferProjection, shadowProjectionInverse;[m
+ uniform int  moonPhase;[m
+[32m+[m[32muniform ivec2 eyeBrightnessSmooth;[m
+[32m+[m[32muniform float viewHeight;[m
+ [m
+ out vec2 texCoord;[m
+[31m-out vec3 sunDir, moonDir;[m
+[31m-flat out vec3 sunC, sunlightC, ambientC,[m
+[32m+[m[32mflat out vec3 sunDir, moonDir;[m
+[32m+[m[32mflat out vec3 sunC, ambientC,[m
+               skyC, horizonC, fogC;[m
+ flat out vec3 keyDir, keyDiscC, keySpecC;[m
+ flat out vec4 nightP;[m
+ flat out vec4 vAtlas;[m
+ [m
+[32m+[m[32m// Per-frame values hoisted out of the fragment stage (uniform-only math)[m
+[32m+[m[32mflat out vec3  fogKeyC, cloudSunC, cloudAmbC, cloudHazeExt, uwBodyC;[m
+[32m+[m[32mflat out vec2  uwSlantXZ;[m
+[32m+[m[32mflat out float skyPx, skyExposure, glintGate,[m
+[32m+[m[32m               keyFade, blocksPerDepth, rsmSunFade, horizonScale,[m
+[32m+[m[32m               uwEyeD;[m
+[32m+[m
+[32m+[m[32m#ifndef saturate[m
+[32m+[m[32m    #define saturate(x) clamp(x, 0.0, 1.0)[m
+[32m+[m[32m#endif[m
+[32m+[m
+ #include "/libs/coreFunctions/atmosphericScattering.glsl"[m
+ #include "/libs/nightEditor.h"[m
+[32m+[m[32m#include "/libs/fogConstants.h"[m
+[32m+[m[32m#define CLOUD_SETTINGS_ONLY[m
+[32m+[m[32m#include "/libs/coreFunctions/cloudSettings.glsl"[m
+ [m
+ void main() {[m
+     gl_Position = ftransform();[m
+[36m@@ -23,11 +39,40 @@[m [mvoid main() {[m
+     moonDir = -sunDir;[m
+     float sunElev = degrees(asin(clamp(sunDir.y, -1.0, 1.0)));[m
+     vAtlas = atlasParams(sunDir, sunElev);[m
+[31m-    getSkyChildren(sunElev, sunC, sunlightC, ambientC, skyC, horizonC, fogC);[m
+[32m+[m[32m    vec3 tableSunlight;[m
+[32m+[m[32m    getSkyChildren(sunElev, sunC, tableSunlight, ambientC, skyC, horizonC, fogC);[m
+ [m
+     vec3 keyC;[m
+[31m-    getKeyLight(sunDir, normalize(mat3(gbufferModelViewInverse) * shadowLightPosition), sunlightC, sunC, moonPhase,[m
+[32m+[m[32m    getKeyLight(sunDir, normalize(mat3(gbufferModelViewInverse) * shadowLightPosition), sunC, sunC, moonPhase,[m
+                 keyDir, keyC, keyDiscC, keySpecC, nightP);[m
+[31m-    sunlightC = keyC;[m
+     applyNightChildren(nightP, ambientC, skyC, horizonC, fogC);[m
+[32m+[m
+[32m+[m[32m    // (100) Night-Gated Fog & Cloud Light Inputs[m
+[32m+[m[32m    fogKeyC   = keyDiscC * ((NIGHT_MOON_FOG_SHAFTS != 0) ? 1.0 : 1.0 - nightP.x);[m
+[32m+[m[32m    cloudSunC = keyDiscC * (CLOUD_SUN_INPUT * 5. * ((NIGHT_MOON_CLOUDS != 0) ? 1.0 : 1.0 - nightP.x));[m
+[32m+[m[32m    cloudAmbC = ambientC * CLOUD_AMBIENT_INPUT + horizonC * (CLOUD_AMBIENT_HORIZON * (1.0 - smoothstep(0.05, 0.55, sunDir.y)));[m
+[32m+[m
+[32m+[m[32m    // (101) Cloud Aerial Perspective: air extinction follows the sunlight tint, so blue dies first as the sun lowers[m
+[32m+[m[32m    float sunTintMax = max(max(keyDiscC.r, keyDiscC.g), keyDiscC.b);[m
+[32m+[m[32m    vec3  sunTint    = (sunTintMax > 1e-6) ? keyDiscC / sunTintMax : vec3(1.0);[m
+[32m+[m[32m    cloudHazeExt     = -log2(max(sunTint, 0.02)) / CLOUD_HAZE_DIST;[m
+[32m+[m
+[32m+[m[32m    // (110) Pixel Angle & Sky Exposure[m
+[32m+[m[32m    float skyLight = saturate(float(eyeBrightnessSmooth.y) / 240.0);[m
+[32m+[m[32m    skyPx       = 2.0 / (gbufferProjection[1][1] * viewHeight);[m
+[32m+[m[32m    skyExposure = mix(FOG_CAVE_FLOOR, 1.0, skyLight);[m
+[32m+[m
+[32m+[m[32m    // (120) Water Glint Gate[m
+[32m+[m[32m    glintGate = smoothstep(-0.02, 0.06, keyDir.y) * ((NIGHT_MOON_GLINT != 0) ? 1.0 : 1.0 - nightP.x);[m
+[32m+[m
+[32m+[m[32m    // (130) Terrain Lighting Constants[m
+[32m+[m[32m    keyFade        = smoothstep(0.0, 0.2, keyDir.y);[m
+[32m+[m[32m    blocksPerDepth = 2.0 * abs(shadowProjectionInverse[2][2]);[m
+[32m+[m[32m    rsmSunFade     = smoothstep(0.2, 0.4, sunDir.y);[m
+[32m+[m[32m    horizonScale   = clamp(dot(ambientC, vec3(0.3333)) / max(dot(mix(horizonC, skyC, 0.5), vec3(0.3333)), 1e-4), 0.5, 1.5);[m
+[32m+[m
+[32m+[m[32m    // (140) Underwater Medium (eye depth mirrors uwEyeDepth() in volumetricFog.glsl)[m
+[32m+[m[32m    uwEyeD    = (1.0 - skyLight) * UW_LIGHT_DEPTH;[m
+[32m+[m[32m    uwSlantXZ = keyDir.xz / max(keyDir.y, 0.3);[m
+[32m+[m[32m    uwBodyC   = ambientC * UW_AMBIENT * UW_WATER_COLOR * UW_ALBEDO * exp(-UW_AMBIENT_EXT * uwEyeD);[m
+ }[m
+[1mdiff --git a/shaders/libs/coreFunctions/atmosphericScattering.glsl b/shaders/libs/coreFunctions/atmosphericScattering.glsl[m
+[1mindex fedd01e..2ad284f 100644[m
+[1m--- a/shaders/libs/coreFunctions/atmosphericScattering.glsl[m
+[1m+++ b/shaders/libs/coreFunctions/atmosphericScattering.glsl[m
+[36m@@ -45,22 +45,49 @@[m [mvec3 atlasRadiance(vec3 v, vec4 a) {[m
+     return exp2(q * ATLAS_RANGE + ATLAS_LO) * SPECTRAL_GAIN;[m
+ }[m
+ [m
+[31m-const float SUN_SIZE      = 1.5;[m
+[32m+[m[32mconst float SUN_SIZE      = 7.0;[m
+ const float SUN_R         = 0.004652332871 * SUN_SIZE;[m
+[31m-const float SUN_RADIANCE  = 24.0;[m
+[32m+[m[32m#ifndef SUN_DISC_GAIN[m
+[32m+[m[32m    #define SUN_DISC_GAIN 2.0[m
+[32m+[m[32m#endif[m
+[32m+[m[32m#ifndef SUN_HALO_GAIN[m
+[32m+[m[32m    #define SUN_HALO_GAIN 1.0[m
+[32m+[m[32m#endif[m
+[32m+[m[32mconst float SUN_RADIANCE  = 150.0 * SUN_DISC_GAIN;[m
+ const vec3  SUN_LIMB_U    = vec3(0.50, 0.62, 0.80);[m
+ const float SUN_FLATTEN   = 0.14;[m
+[31m-const float AUR_TIGHT     = 1.2,  AUR_TIGHT_W = 0.020;[m
+[31m-const float AUR_WIDE      = 0.02, AUR_WIDE_W  = 0.180;[m
+[32m+[m[32m#ifndef SUN_LUMA_COMPRESS[m
+[32m+[m[32m    #define SUN_LUMA_COMPRESS 0.35[m
+[32m+[m[32m#endif[m
+[32m+[m[32m#ifndef SUN_HALO_FLATTEN[m
+[32m+[m[32m    #define SUN_HALO_FLATTEN 1.5[m
+[32m+[m[32m#endif[m
+[32m+[m[32m#ifndef SUNSET_GLOW[m
+[32m+[m[32m    #define SUNSET_GLOW 1.0[m
+[32m+[m[32m#endif[m
+[32m+[m[32m// Sun = a big, extremely hot disc (saturates to white after tonemap) + halo lobes that MODULATE the sky itself,[m
+[32m+[m[32m// so glow and sky share one hue instead of a separate additive blob. All smooth in (1 - cos): no seam anywhere.[m
+[32m+[m[32mconst float HALO_TIGHT = 2.0,  HALO_TIGHT_K = 600.0;   // hot white shoulder around the disc (adds sun hue)[m
+[32m+[m[32mconst float HALO_MID   = 2.5,  HALO_MID_K   = 60.0;    // sky-tinted brightening (multiplies atlas sky)[m
+[32m+[m[32mconst float HALO_WIDE  = 0.9,  HALO_WIDE_K  = 7.0;     // horizon-tinted warm bloom (adds horizonC)[m
+ [m
+[31m-vec3 sunLight(vec3 v, vec3 ld, vec3 sunC, float px) {[m
+[32m+[m[32m// x: tight lobe, y: mid lobe, z: wide lobe  (vertical offsets count more at low sun -> horizontal stretch)[m
+[32m+[m[32mvec3 sunLobes(vec3 v, vec3 ld) {[m
+     vec3  d  = v - ld;[m
+     float d2 = dot(d, d);[m
+[32m+[m[32m    float flatten = 1.0 + SUN_HALO_FLATTEN * (1.0 - smoothstep(0.0, 0.35, ld.y)),[m
+[32m+[m[32m          dg2     = d2 + (flatten * flatten - 1.0) * d.y * d.y;[m
+[32m+[m[32m    return exp2(-vec3(HALO_TIGHT_K * d2, HALO_MID_K * dg2, HALO_WIDE_K * dg2) * 0.5);[m
+[32m+[m[32m}[m
+ [m
+[31m-    float gt = 1.0 + d2 / (AUR_TIGHT_W * AUR_TIGHT_W),[m
+[31m-          gw = 1.0 + d2 / (AUR_WIDE_W  * AUR_WIDE_W);[m
+[31m-    vec3 glow = sunC * (AUR_TIGHT * inversesqrt(gt * gt * gt) + AUR_WIDE * inversesqrt(gw * gw * gw));[m
+[32m+[m[32mvec3 sunLight(vec3 v, vec3 ld, vec3 sunC, float px) {[m
+[32m+[m[32m    // Hue only from the table; brightness is a fixed huge radiance like a real overexposed sun[m
+[32m+[m[32m    float sunMax = max(max(sunC.r, sunC.g), sunC.b);[m
+[32m+[m[32m    vec3  hue    = sunC / max(sunMax, 1e-4);[m
+[32m+[m[32m    float lum    = pow(sunMax, SUN_LUMA_COMPRESS);[m
+ [m
+[32m+[m[32m    vec3  d  = v - ld;[m
+[32m+[m[32m    float d2 = dot(d, d);[m
+     float vy = d.y * inversesqrt(max(1.0 - ld.y * ld.y, 0.0025));[m
+     float hz = max(d2 - d.y * d.y, 0.0);[m
+     float sq = 1.0 + SUN_FLATTEN * (1.0 - smoothstep(0.0, 0.25, ld.y));[m
+[36m@@ -69,29 +96,50 @@[m [mvec3 sunLight(vec3 v, vec3 ld, vec3 sunC, float px) {[m
+     float mu   = sqrt(1.0 - min(r * r, 1.0));[m
+     vec3  limb = (1.0 - SUN_LIMB_U * (1.0 - mu)) / (1.0 - SUN_LIMB_U / 3.0);[m
+     float pr   = px / SUN_R;[m
+[31m-    float edge = 1.0 - smoothstep(1.0 - pr, 1.0 + pr, r);[m
+[32m+[m[32m    float edge = 1.0 - smoothstep(1.0 - max(pr, 0.15), 1.0 + max(pr, 0.15), r);[m
+ [m
+[31m-    return sunC * SUN_RADIANCE * limb * edge + glow;[m
+[32m+[m[32m    vec3 discC = mix(hue, vec3(1.0), 0.6) * lum;[m
+[32m+[m[32m    return discC * (SUN_RADIANCE * limb * edge);[m
+ }[m
+ [m
+ #include "skyEssentials.glsl"[m
+ [m
+[32m+[m[32m// Sunset horizon glow: the table's horizon colour, concentrated toward the sun's azimuth and hugging the horizon[m
+[32m+[m[32mvec3 sunsetGlow(vec3 v, vec3 ld, vec3 horC) {[m
+[32m+[m[32m    float lowSun = (1.0 - smoothstep(0.05, 0.5, ld.y)) * smoothstep(-0.15, 0.0, ld.y),[m
+[32m+[m[32m          hv     = dot(v.xz, v.xz),[m
+[32m+[m[32m          hl     = dot(ld.xz, ld.xz),[m
+[32m+[m[32m          cosAz  = (hv > 1e-6 && hl > 1e-6) ? dot(v.xz, ld.xz) * inversesqrt(hv * hl) : 0.0,[m
+[32m+[m[32m          az     = max(cosAz, 0.0);[m
+[32m+[m[32m    return horC * (SUNSET_GLOW * lowSun * az * az * exp2(-4.0 * max(v.y, 0.0)));[m
+[32m+[m[32m}[m
+[32m+[m
+ vec3 underSky(vec3 v, vec3 skyC, vec3 horC) {[m
+     float ny = max(-v.y, 0.0);[m
+     vec3 voidColor = skyC * mix(0.7, 0.5, ny);[m
+     return mix(horC * skyC.b * 20.0, voidColor, clamp(pow(ny, 0.04), 0.0, 1.0));[m
+ }[m
+ [m
+[32m+[m[32m// Sky radiance without the sun disc (atlas sky + halo lobes + sunset glow). Clouds use this as their aerial-perspective colour,[m
+[32m+[m[32m// so a distant cloud converges to exactly the sky colour behind it.[m
+[32m+[m[32mvec3 skyBody(vec3 v, vec4 a, vec3 ld, vec3 sunC, vec3 horC) {[m
+[32m+[m[32m    vec3 vs = v.y > 0.0 ? v : (dot(v.xz, v.xz) > 1e-8 ? normalize(vec3(v.x, 0.0, v.z)) : vec3(1.0, 0.0, 0.0));[m
+[32m+[m[32m    vec3  sky   = atlasRadiance(vs, a);[m
+[32m+[m[32m    vec3  lobes = sunLobes(v, ld);[m
+[32m+[m[32m    float sMax  = max(max(sunC.r, sunC.g), sunC.b);[m
+[32m+[m[32m    vec3  sHue  = sunC / max(sMax, 1e-4);[m
+[32m+[m[32m    float lum   = pow(sMax, SUN_LUMA_COMPRESS) * SUN_HALO_GAIN;[m
+[32m+[m[32m    sky *= 1.0 + HALO_MID * lobes.y * lum;[m
+[32m+[m[32m    sky += sHue * (HALO_TIGHT * lobes.x * lum * 5.0) + horC * (HALO_WIDE * lobes.z * lum) + sunsetGlow(v, ld, horC);[m
+[32m+[m[32m    return sky;[m
+[32m+[m[32m}[m
+[32m+[m
+ vec3 skyHDR(vec3 rd, vec4 a, vec3 ld, vec3 sunC, vec3 skyC, vec3 horC, float w, float px) {[m
+     vec3 v = normalize(rd);[m
+     w = max(w, 1e-5);[m
+     float s = smoothstep(-w, w, v.y);[m
+     vec3 sky = vec3(0.0), under = vec3(0.0);[m
+[31m-    if (s > 0.0) {[m
+[31m-        vec3 vs = v.y > 0.0 ? v : (dot(v.xz, v.xz) > 1e-8 ? normalize(vec3(v.x, 0.0, v.z)) : vec3(1.0, 0.0, 0.0));[m
+[31m-        sky = atlasRadiance(vs, a);[m
+[31m-        if (dot(v, ld) > 0.0) sky += sunLight(v, ld, sunC, px) * 5.0;[m
+[31m-    }[m
+[32m+[m[32m    if (s > 0.0) sky = skyBody(v, a, ld, sunC, horC) + sunLight(v, ld, sunC, px);[m
+     if (s < 1.0) under = underSky(v, skyC, horC);[m
+     return mix(under, sky, s);[m
+[31m-}[m
+\ No newline at end of file[m
+[32m+[m[32m}[m
+[1mdiff --git a/shaders/libs/coreFunctions/cloudSettings.glsl b/shaders/libs/coreFunctions/cloudSettings.glsl[m
+[1mindex be8b950..3e1dc1e 100644[m
+[1m--- a/shaders/libs/coreFunctions/cloudSettings.glsl[m
+[1m+++ b/shaders/libs/coreFunctions/cloudSettings.glsl[m
+[36m@@ -8,8 +8,12 @@[m
+ #define CLOUD_WIND_SPEED        7.0[m
+ #define CLOUD_ALTITUDE_BIAS     200.0[m
+ #define CLOUD_GRADE             0.3[m
+[32m+[m[32m#define CLOUD_AMBIENT_HORIZON   0.8[m
+[32m+[m[32m#define CLOUD_HAZE_DIST         2200.0[m
+[32m+[m[32m#define CLOUD_HAZE_GAIN         1.0[m
+[32m+[m[32m#define CLOUD_HAZE_SUN          0.06[m
+ [m
+[31m-#ifdef MIRAI_CLOUDS[m
+[32m+[m[32m#if defined(MIRAI_CLOUDS) && !defined(CLOUD_SETTINGS_ONLY)[m
+     #include "/libs/coreFunctions/miraiClouds.glsl"[m
+ #endif[m
+ [m
+[1mdiff --git a/shaders/libs/coreFunctions/miraiClouds.glsl b/shaders/libs/coreFunctions/miraiClouds.glsl[m
+[1mindex d0cdb5d..628563f 100644[m
+[1m--- a/shaders/libs/coreFunctions/miraiClouds.glsl[m
+[1m+++ b/shaders/libs/coreFunctions/miraiClouds.glsl[m
+[36m@@ -12,6 +12,15 @@[m
+ #ifndef CLOUD_MAX_ITER[m
+ #define CLOUD_MAX_ITER 640[m
+ #endif[m
+[32m+[m[32m#ifndef CLOUD_LIGHT_TAPS_HI[m
+[32m+[m[32m#define CLOUD_LIGHT_TAPS_HI 6[m
+[32m+[m[32m#endif[m
+[32m+[m[32m#ifndef CLOUD_LIGHT_TAPS_LO[m
+[32m+[m[32m#define CLOUD_LIGHT_TAPS_LO 3[m
+[32m+[m[32m#endif[m
+[32m+[m[32m#ifndef CLOUD_AMBIENT_TAPS[m
+[32m+[m[32m#define CLOUD_AMBIENT_TAPS 3[m
+[32m+[m[32m#endif[m
+ #define CLD_HP highp[m
+ #define CLD_MP mediump[m
+ [m
+[36m@@ -28,14 +37,14 @@[m [mconst int      CLOUD_SKIP_ZERO_RUN=3;[m
+ const CLD_HP float CLOUD_TRANS_CUT=0.005;[m
+ const CLD_HP float CLOUD_LIGHT_MIN_WEIGHT=1e-3;[m
+ const CLD_MP float CLOUD_LIGHT_LOW_WEIGHT=0.01;[m
+[31m-const CLD_HP float CLOUD_STEP_GROWTH_START=8000.0;[m
+[31m-const CLD_HP float CLOUD_STEP_GROWTH_RATE=1.0/4000.0;[m
+[32m+[m[32mconst CLD_HP float CLOUD_STEP_GROWTH_START=400.0;[m
+[32m+[m[32mconst CLD_HP float CLOUD_STEP_GROWTH_RATE=1.0/1500.0;[m
+ const CLD_MP float CLOUD_DENSE_MULT=3.0;[m
+ const CLD_MP float CLOUD_DENSE_LO=0.04;[m
+ const CLD_MP float CLOUD_DENSE_HI=0.10;[m
+[31m-const CLD_HP float CLOUD_MAX_DIST=14000.0;[m
+[31m-const CLD_HP float CLOUD_FADE_START=4000.0;[m
+[31m-const CLD_HP float CLOUD_FADE_END=12000.0;[m
+[32m+[m[32mconst CLD_HP float CLOUD_MAX_DIST=12000.0;[m
+[32m+[m[32mconst CLD_HP float CLOUD_FADE_START=1500.0;[m
+[32m+[m[32mconst CLD_HP float CLOUD_FADE_END=10000.0;[m
+ const CLD_MP float CLOUD_FADE_MAX=1.0;[m
+ const CLD_MP float CLOUD_RADIANCE_TRIM=1.0163;[m
+ [m
+[36m@@ -45,8 +54,8 @@[m [mconst CLD_MP float CLOUD_MULTIPLE_SCALE=1.30;[m
+ const CLD_MP float CLOUD_IN_SCATTER_STRENGTH=0.07;[m
+ const CLD_MP float CLOUD_AMBIENT_SCALE=0.50;[m
+ const CLD_MP float CLOUD_AMBIENT_OCCLUSION_SCALE=0.010;[m
+[31m-const CLD_MP float CLOUD_SHADOW_POWER=3.0;[m
+[31m-const CLD_MP float CLOUD_SILVER_GAIN=0.50;[m
+[32m+[m[32mconst CLD_MP float CLOUD_SHADOW_POWER=2.5;[m
+[32m+[m[32mconst CLD_MP float CLOUD_SILVER_GAIN=2.80;[m
+ const CLD_MP float CLOUD_SKY_BOUNCE=0.50;[m
+ const CLD_MP float CLOUD_AMBIENT_FLOOR=0.14;[m
+ const CLD_MP float CLOUD_POWDER_GAIN=0.45;[m
+[36m@@ -136,8 +145,10 @@[m [mvec3 miraiSkyAmbient(){[m
+ }[m
+ #endif[m
+ [m
+[31m-CLD_HP vec3 miraiCloudCompositeCut(CLD_HP vec3 cam,CLD_HP vec3 rd,CLD_HP vec3 ld,CLD_MP vec3 sunCol,CLD_MP vec3 skyAmbientRaw,CLD_HP vec3 bg,[m
+[31m-                            CLD_HP float timeX,CLD_HP float tCut,out CLD_HP float transmittance,out CLD_HP vec3 radiance)[m
+[32m+[m[32m// Returns the cloud layer as (R, T) so that final = bg * T + R. hazeExt / hazeCol give distance-based aerial perspective.[m
+[32m+[m[32mvoid miraiCloudLayer(CLD_HP vec3 cam,CLD_HP vec3 rd,CLD_HP vec3 ld,CLD_MP vec3 sunCol,CLD_MP vec3 skyAmbientRaw,[m
+[32m+[m[32m                     CLD_HP float timeX,CLD_HP float tCut,CLD_HP vec3 hazeExt,CLD_HP vec3 hazeCol,[m
+[32m+[m[32m                     out CLD_HP vec3 R,out CLD_HP float T)[m
+ {[m
+     gCloudTime=timeX;[m
+     CLD_MP vec3 ambientCol=skyAmbientRaw;[m
+[36m@@ -198,9 +209,9 @@[m [mCLD_HP vec3 miraiCloudCompositeCut(CLD_HP vec3 cam,CLD_HP vec3 rd,CLD_HP vec3 ld[m
+             if(weight>=CLOUD_LIGHT_MIN_WEIGHT){[m
+                 CLD_MP float h=cloudHeight01(pp.y);[m
+                 CLD_HP float lightPath=min(max((CLOUD_MAX_Y-pp.y)*invLdY,0.0),800.0);[m
+[31m-                int ns=(weight>=CLOUD_LIGHT_LOW_WEIGHT)?8:4;[m
+[32m+[m[32m                int ns=(weight>=CLOUD_LIGHT_LOW_WEIGHT)?CLOUD_LIGHT_TAPS_HI:CLOUD_LIGHT_TAPS_LO;[m
+                 CLD_MP float odSum=0.0;[m
+[31m-                for(int i=0;i<8;i++){[m
+[32m+[m[32m                for(int i=0;i<CLOUD_LIGHT_TAPS_HI;i++){[m
+                     if(i>=ns) break;[m
+                     CLD_HP float u=(float(i)+0.5)/float(ns);[m
+                     odSum+=cloudDensityFull(pp+ld*(lightPath*u));[m
+[36m@@ -232,10 +243,11 @@[m [mCLD_HP vec3 miraiCloudCompositeCut(CLD_HP vec3 cam,CLD_HP vec3 rd,CLD_HP vec3 ld[m
+                 CLD_MP vec3 inscatter=(depthProb*vertProb*Tsh*secondary*CLOUD_IN_SCATTER_STRENGTH)*inscCol;[m
+ [m
+                 CLD_MP float ambOd=0.0;[m
+[31m-                for(int k=0;k<4;k++){[m
+[31m-                    CLD_HP float ay=pp.y+35.0+70.0*float(k);[m
+[32m+[m[32m                const CLD_MP float ambSpan=280.0/float(CLOUD_AMBIENT_TAPS);[m
+[32m+[m[32m                for(int k=0;k<CLOUD_AMBIENT_TAPS;k++){[m
+[32m+[m[32m                    CLD_HP float ay=pp.y+0.5*ambSpan+ambSpan*float(k);[m
+                     if(ay>CLOUD_MAX_Y) break;[m
+[31m-                    CLD_MP float pr; ambOd+=cloudDensityFromBase(bb,vec3(pp.x,ay,pp.z),pr)*70.0;[m
+[32m+[m[32m                    CLD_MP float pr; ambOd+=cloudDensityFromBase(bb,vec3(pp.x,ay,pp.z),pr)*ambSpan;[m
+                 }[m
+                 CLD_MP float ambProb=(CLOUD_AMBIENT_FLOOR+(1.0-CLOUD_AMBIENT_FLOOR)*sqrt(max(1.0-profile,0.0)))*exp(-ambOd*CLOUD_AMBIENT_OCCLUSION_SCALE);[m
+                 CLD_MP vec3 ambient=(ambProb*CLOUD_AMBIENT_SCALE)*ambientCol;[m
+[36m@@ -249,10 +261,21 @@[m [mCLD_HP vec3 miraiCloudCompositeCut(CLD_HP vec3 cam,CLD_HP vec3 rd,CLD_HP vec3 ld[m
+         t+=sf;[m
+     }[m
+     }[m
+[31m-    radiance=rad*CLOUD_RADIANCE_TRIM; transmittance=trans;[m
+[31m-    CLD_HP vec3 color=trans*bg+radiance;[m
+[31m-    CLD_HP float fade=CLOUD_FADE_MAX*smoothstep(CLOUD_FADE_START,CLOUD_FADE_END,wsumT/max(wsum,CLOUD_EPS))*(wsum>0.0?1.0:0.0);[m
+[31m-    return bg+(color-bg)*(1.0-fade);[m
+[32m+[m[32m    CLD_HP float dist=wsumT/max(wsum,CLOUD_EPS);[m
+[32m+[m[32m    CLD_HP vec3 air=exp2(-hazeExt*dist);[m
+[32m+[m[32m    CLD_HP vec3 radiance=rad*CLOUD_RADIANCE_TRIM*air+hazeCol*(1.0-air)*(1.0-trans);[m
+[32m+[m[32m    CLD_HP float fade=CLOUD_FADE_MAX*smoothstep(CLOUD_FADE_START,CLOUD_FADE_END,dist)*(wsum>0.0?1.0:0.0);[m
+[32m+[m[32m    T=1.0-(1.0-trans)*(1.0-fade);[m
+[32m+[m[32m    R=radiance*(1.0-fade);[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mCLD_HP vec3 miraiCloudCompositeCut(CLD_HP vec3 cam,CLD_HP vec3 rd,CLD_HP vec3 ld,CLD_MP vec3 sunCol,CLD_MP vec3 skyAmbientRaw,CLD_HP vec3 bg,[m
+[32m+[m[32m                            CLD_HP float timeX,CLD_HP float tCut,out CLD_HP float transmittance,out CLD_HP vec3 radiance)[m
+[32m+[m[32m{[m
+[32m+[m[32m    CLD_HP vec3 R; CLD_HP float T;[m
+[32m+[m[32m    miraiCloudLayer(cam,rd,ld,sunCol,skyAmbientRaw,timeX,tCut,vec3(0.0),vec3(0.0),R,T);[m
+[32m+[m[32m    transmittance=T; radiance=R;[m
+[32m+[m[32m    return bg*T+R;[m
+ }[m
+ [m
+ CLD_HP vec3 miraiCloudComposite(CLD_HP vec3 cam,CLD_HP vec3 rd,CLD_HP vec3 ld,CLD_MP vec3 sunCol,CLD_MP vec3 skyAmbientRaw,CLD_HP vec3 bg,[m
+[1mdiff --git a/shaders/libs/coreFunctions/pbrModule.glsl b/shaders/libs/coreFunctions/pbrModule.glsl[m
+[1mindex 3c46e47..92e8b5e 100644[m
+[1m--- a/shaders/libs/coreFunctions/pbrModule.glsl[m
+[1m+++ b/shaders/libs/coreFunctions/pbrModule.glsl[m
+[36m@@ -78,11 +78,11 @@[m [mbool isReflective(Material mat) {[m
+ }[m
+ [m
+ // (019) Sun Specular Lobe[m
+[31m-vec3 specularLobe(Material mat, float NdotL, float NdotV, float NdotH, vec3 fresnel, vec3 lightIlluminance, vec3 sunCol) {[m
+[31m-    return fresnel * (D_GGX(NdotH, mat.alpha) * V_SmithGGXCorrelated(NdotV, NdotL, mat.alpha)) * sunCol * 2.0 * lightIlluminance * NdotL;[m
+[32m+[m[32mvec3 specularLobe(Material mat, float NdotL, float NdotV, float NdotH, vec3 fresnel, vec3 sunCol) {[m
+[32m+[m[32m    return fresnel * (D_GGX(NdotH, mat.alpha) * V_SmithGGXCorrelated(NdotV, NdotL, mat.alpha)) * sunCol * 2.0 * NdotL;[m
+ }[m
+ [m
+[31m-vec3 shadeSunSpecular(Material mat, vec3 normal, vec3 viewDir, vec3 lightDir, vec3 lightIlluminance, vec3 sunCol) {[m
+[32m+[m[32mvec3 shadeSunSpecular(Material mat, vec3 normal, vec3 viewDir, vec3 lightDir, vec3 sunCol) {[m
+     float NdotL = dot(normal, lightDir);[m
+     if (NdotL <= 0.0) return vec3(0.0);[m
+ [m
+[36m@@ -91,7 +91,7 @@[m [mvec3 shadeSunSpecular(Material mat, vec3 normal, vec3 viewDir, vec3 lightDir, ve[m
+           NdotH   = clamp(dot(normal, halfDir), 0.0, 1.0),[m
+           VdotH   = clamp(dot(viewDir, halfDir), 0.0, 1.0);[m
+ [m
+[31m-    return specularLobe(mat, NdotL, NdotV, NdotH, F_Schlick(VdotH, mat.F0, mat.pRough), lightIlluminance, sunCol);[m
+[32m+[m[32m    return specularLobe(mat, NdotL, NdotV, NdotH, F_Schlick(VdotH, mat.F0, mat.pRough), sunCol);[m
+ }[m
+ [m
+ // (020) Direct Analytical Light Evaluation[m
+[36m@@ -106,17 +106,19 @@[m [mvec3 shadeDirect(Material mat, vec3 normal, vec3 viewDir, vec3 lightDir, vec3 li[m
+     vec3  fresnel  = F_Schlick(VdotH, mat.F0, mat.pRough),[m
+           diffuse  = (1.0 - fresnel) * (1.0 - mat.metallic) * mat.albedo / PI;[m
+ [m
+[31m-    return diffuse * lightIlluminance * NdotL + specularLobe(mat, NdotL, NdotV, NdotH, fresnel, lightIlluminance, sunCol);[m
+[32m+[m[32m    return diffuse * lightIlluminance * NdotL + specularLobe(mat, NdotL, NdotV, NdotH, fresnel, sunCol);[m
+ }[m
+ [m
+ // (021) Image-Based / Environmental Ambient Shading[m
+ vec3 shadeAmbient(Material mat, vec3 normal, vec3 viewDir, vec3 skyIrradiance, vec3 skyReflection, float ao) {[m
+[31m-    float NdotV = max(dot(normal, viewDir), 1e-4);[m
+[31m-[m
+[31m-    vec3  specularEnv = EnvBRDFApprox(mat.F0, mat.pRough, NdotV) * PBR_AMBIENT_SPECULAR,[m
+[31m-          diffuseEnv  = (1.0 - specularEnv) * (1.0 - mat.metallic),[m
+[31m-          diffuse     = diffuseEnv * mat.albedo * skyIrradiance,[m
+[31m-          specular    = specularEnv * skyReflection;[m
+[32m+[m[32m    vec3 specularEnv = vec3(0.0),[m
+[32m+[m[32m         specular    = vec3(0.0);[m
+[32m+[m[32m    if (PBR_AMBIENT_SPECULAR > 0.0) {[m
+[32m+[m[32m        specularEnv = EnvBRDFApprox(mat.F0, mat.pRough, max(dot(normal, viewDir), 1e-4)) * PBR_AMBIENT_SPECULAR;[m
+[32m+[m[32m        specular    = specularEnv * skyReflection;[m
+[32m+[m[32m    }[m
+[32m+[m[32m    vec3 diffuseEnv = (1.0 - specularEnv) * (1.0 - mat.metallic),[m
+[32m+[m[32m         diffuse    = diffuseEnv * mat.albedo * skyIrradiance;[m
+ [m
+     return (diffuse + specular) * ao;[m
+ }[m
+[1mdiff --git a/shaders/libs/coreFunctions/reflectionModule.glsl b/shaders/libs/coreFunctions/reflectionModule.glsl[m
+[1mindex dc8a1c1..9093223 100644[m
+[1m--- a/shaders/libs/coreFunctions/reflectionModule.glsl[m
+[1m+++ b/shaders/libs/coreFunctions/reflectionModule.glsl[m
+[36m@@ -19,7 +19,6 @@[m [mvec3 environmentReflection(vec3 viewPos, vec3 nTraceView, vec3 nDetailView, vec3[m
+     float ssrOcclusion = 0.0;[m
+     vec4  ssr          = traceWaterSSR(viewPos, nTraceView, nDetailView, roughness, maxDistance, surfaceWorldY, ssrOcclusion);[m
+ [m
+[31m-    float skyPx = 2.0 / (gbufferProjection[1][1] * viewHeight);[m
+     vec3  sky   = skyHDR(reflectDirWorld, vAtlas, sunDir, vec3(0.0), skyC, horizonC, skyPx * 1.5, skyPx) * skyGrade * skyGain;[m
+     sky += nightSky(reflectDirWorld, sunDir, nightP, skyPx, frameTimeCounter, 0.0) * skyGain;[m
+     sky *= mix(1.0, REFLECTION_OCCLUDED_SKY, ssrOcclusion) * skyVisibility;[m
+[1mdiff --git a/shaders/libs/coreFunctions/volumetricFog.glsl b/shaders/libs/coreFunctions/volumetricFog.glsl[m
+[1mindex cabdd6e..868ae87 100644[m
+[1m--- a/shaders/libs/coreFunctions/volumetricFog.glsl[m
+[1m+++ b/shaders/libs/coreFunctions/volumetricFog.glsl[m
+[36m@@ -2,6 +2,7 @@[m
+ #define VOLUMETRIC_FOG_GLSL[m
+ [m
+ #include "/libs/skyGrade.h"[m
+[32m+[m[32m#include "/libs/fogConstants.h"[m
+ [m
+ #ifndef PI[m
+     #define PI 3.141592653589793[m
+[36m@@ -10,30 +11,6 @@[m
+     #define saturate(x) clamp(x, 0.0, 1.0)[m
+ #endif[m
+ [m
+[31m-// (071) Fog Constants[m
+[31m-#ifndef FOG_STEPS[m
+[31m-    #define FOG_STEPS 12[m
+[31m-#endif[m
+[31m-#ifndef FOG_STEPS_PER_BLOCK[m
+[31m-    #define FOG_STEPS_PER_BLOCK 0.3[m
+[31m-#endif[m
+[31m-[m
+[31m-const float FOG_DENSITY           = 0.0035,[m
+[31m-            FOG_BASE_HEIGHT       = 61.0,[m
+[31m-            FOG_FALLOFF           = 16.0,[m
+[31m-            FOG_MAX_EXPONENT      = 2.0,[m
+[31m-            FOG_MARCH_DIST        = 160.0,[m
+[31m-            FOG_SKY_DIST          = 512.0,[m
+[31m-            FOG_SCATTER_ALBEDO    = 0.95,[m
+[31m-            FOG_SUN_INTENSITY     = 0.60,[m
+[31m-            FOG_AMBIENT_INTENSITY = 0.25,[m
+[31m-            FOG_MIE_G_FORWARD     = 0.78,[m
+[31m-            FOG_MIE_G_SOFT        = 0.25,[m
+[31m-            FOG_MIE_BLEND         = 0.65,[m
+[31m-            FOG_SHADOW_BIAS       = 0.0002,[m
+[31m-            FOG_CAVE_FLOOR        = 0.10;[m
+[31m-const vec3  FOG_TINT              = vec3(SKY_GRADE.x, SKY_GRADE.y * 0.95, SKY_GRADE.z) * 0.7;[m
+[31m-[m
+ // (072) Henyey-Greenstein Phase[m
+ float phaseHG(float cosTheta, float g) {[m
+     float g2 = g * g,[m
+[36m@@ -64,6 +41,18 @@[m [mvec3 fogDistortShadow(vec3 shadowClipPos) {[m
+     return shadowClipPos;[m
+ }[m
+ [m
+[32m+[m[32m// Orthographic shadow clip is affine along a ray: clip(start + dir * t) = clip(start) + clipDir(dir) * t[m
+[32m+[m[32mvec3 fogShadowClip(vec3 p) {[m
+[32m+[m[32m    vec3 v = mat3(shadowModelView) * p + shadowModelView[3].xyz;[m
+[32m+[m[32m    return vec3(v.xy * vec2(shadowProjection[0][0], shadowProjection[1][1]) + shadowProjection[3].xy,[m
+[32m+[m[32m                v.z * shadowProjection[2][2] + shadowProjection[3][2]);[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mvec3 fogShadowClipDir(vec3 d) {[m
+[32m+[m[32m    vec3 v = mat3(shadowModelView) * d;[m
+[32m+[m[32m    return vec3(v.xy * vec2(shadowProjection[0][0], shadowProjection[1][1]), v.z * shadowProjection[2][2]);[m
+[32m+[m[32m}[m
+[32m+[m
+ float fogShadow(vec3 shadowClipPos) {[m
+     vec3 shadowScreenPos = fogDistortShadow(shadowClipPos) * 0.5 + 0.5;[m
+     if (saturate(shadowScreenPos) != shadowScreenPos) return 1.0;[m
+[36m@@ -82,8 +71,8 @@[m [mvec4 getVolumetricFog(vec3 rayStart, vec3 rayEnd, float dither, float skyExposur[m
+           ambScatter = ambCol * (FOG_AMBIENT_INTENSITY * skyExposure);[m
+ [m
+     vec3 marchEnd        = rayStart + rayDir * marchLen,[m
+[31m-         shadowClipStart = (shadowProjection * vec4((shadowModelView * vec4(rayStart, 1.0)).xyz, 1.0)).xyz,[m
+[31m-         shadowClipEnd   = (shadowProjection * vec4((shadowModelView * vec4(marchEnd, 1.0)).xyz, 1.0)).xyz;[m
+[32m+[m[32m         shadowClipStart = fogShadowClip(rayStart),[m
+[32m+[m[32m         shadowClipDir   = fogShadowClipDir(rayDir);[m
+ [m
+     int   steps         = int(clamp(ceil(marchLen * FOG_STEPS_PER_BLOCK), 4.0, float(FOG_STEPS)));[m
+     bool  sunLit        = max(sunScatter.r, max(sunScatter.g, sunScatter.b)) > 1e-5;[m
+[36m@@ -100,7 +89,7 @@[m [mvec4 getVolumetricFog(vec3 rayStart, vec3 rayEnd, float dither, float skyExposur[m
+               sampleY   = cameraPosition.y + rayStart.y + rayDir.y * sampleT,[m
+               density   = fogDensity(sampleY),[m
+               stepTrans = exp(-density * stepLen);[m
+[31m-        vec3  stepLight = (sunLit ? sunScatter * fogShadow(mix(shadowClipStart, shadowClipEnd, sampleT / max(marchLen, 1e-4))) : vec3(0.0)) + ambScatter;[m
+[32m+[m[32m        vec3  stepLight = (sunLit ? sunScatter * fogShadow(shadowClipStart + shadowClipDir * sampleT) : vec3(0.0)) + ambScatter;[m
+         inScatter     += transmittance * stepLight * (FOG_SCATTER_ALBEDO * (1.0 - stepTrans));[m
+         transmittance *= stepTrans;[m
+         if (transmittance < 0.01) break;[m
+[36m@@ -118,24 +107,6 @@[m [mvec4 getVolumetricFog(vec3 rayStart, vec3 rayEnd, float dither, float skyExposur[m
+ // (080) UNDERWATER MEDIUM[m
+ uniform int isEyeInWater;[m
+ [m
+[31m-#ifndef UW_STEPS[m
+[31m-    #define UW_STEPS 10[m
+[31m-#endif[m
+[31m-const vec3  UW_EXTINCTION      = vec3(0.150, 0.052, 0.042),[m
+[31m-            UW_LIGHT_EXT       = vec3(0.280, 0.085, 0.060),[m
+[31m-            UW_AMBIENT_EXT     = vec3(0.110, 0.040, 0.030),[m
+[31m-            UW_WATER_COLOR     = vec3(0.30, 1.00, 0.85);[m
+[31m-const float UW_MARCH_DIST      = 72.0,[m
+[31m-            UW_SKY_DIST        = 56.0,[m
+[31m-            UW_LIGHT_DEPTH     = 15.0,[m
+[31m-            UW_ALBEDO          = 0.92,[m
+[31m-            UW_SUN_INTENSITY   = 1.5,[m
+[31m-            UW_AMBIENT         = 2.2,[m
+[31m-            UW_PHASE_G         = 0.72,[m
+[31m-            UW_SHAFT_CONTRAST  = 0.55,[m
+[31m-            UW_CAUSTIC_STRENGTH = 0.75,[m
+[31m-            UW_CAUSTIC_FADE    = 0.10;[m
+[31m-[m
+ // (081) Eye Depth Below The Surface[m
+ float uwEyeDepth() {[m
+     return (1.0 - saturate(float(eyeBrightnessSmooth.y) / 240.0)) * UW_LIGHT_DEPTH;[m
+[36m@@ -172,9 +143,8 @@[m [mvec3 applyUnderwaterFog(vec3 color, vec3 rayStart, vec3 rayEnd, float dither, ve[m
+           cosTheta = dot(rayDir, keyDirW),[m
+           phase    = phaseHG(cosTheta, UW_PHASE_G) + 0.08;[m
+     vec3  sunScatter = keyCol * (phase * UW_SUN_INTENSITY),[m
+[31m-          marchEnd   = rayStart + rayDir * marchLen,[m
+[31m-          clipStart  = (shadowProjection * vec4((shadowModelView * vec4(rayStart, 1.0)).xyz, 1.0)).xyz,[m
+[31m-          clipEnd    = (shadowProjection * vec4((shadowModelView * vec4(marchEnd, 1.0)).xyz, 1.0)).xyz;[m
+[32m+[m[32m          clipStart  = fogShadowClip(rayStart),[m
+[32m+[m[32m          clipDir    = fogShadowClipDir(rayDir);[m
+ [m
+     float invSteps = 1.0 / float(UW_STEPS),[m
+           slant    = 1.0 / max(keyDirW.y, 0.3),[m
+[36m@@ -195,7 +165,7 @@[m [mvec3 applyUnderwaterFog(vec3 color, vec3 rayStart, vec3 rayEnd, float dither, ve[m
+ [m
+         vec3  samplePos = rayStart + rayDir * sampleT;[m
+         float shaft     = mix(1.0, 0.45 + 1.1 * smoothstep(0.25, 0.95, uwCausticRidge(cameraPosition.xz + samplePos.xz - lightXZ * depth, time)), UW_SHAFT_CONTRAST),[m
+[31m-              lit       = fogShadow(mix(clipStart, clipEnd, sampleT / max(marchLen, 1e-4)));[m
+[32m+[m[32m              lit       = fogShadow(clipStart + clipDir * sampleT);[m
+         vec3  stepLight = sunScatter * exp(-UW_LIGHT_EXT * (depth * slant)) * (lit * shaft)[m
+                         + ambCol * UW_AMBIENT * exp(-UW_AMBIENT_EXT * depth);[m
+         inScatter += trans * stepLight * (UW_ALBEDO * (vec3(1.0) - stepTrans));[m
+[1mdiff --git a/shaders/libs/exposure.h b/shaders/libs/exposure.h[m
+[1mindex f0d099c..0483e69 100644[m
+[1m--- a/shaders/libs/exposure.h[m
+[1m+++ b/shaders/libs/exposure.h[m
+[36m@@ -1,8 +1,8 @@[m
+ #ifndef EXPOSURE_H[m
+ #define EXPOSURE_H[m
+ [m
+[31m-const float targetExposure     = 0.25;[m
+[31m-const float adaptationStrength = 0.6;[m
+[32m+[m[32mconst float targetExposure     = 0.2;[m
+[32m+[m[32mconst float adaptationStrength = 0.75;[m
+ [m
+ // (001) Exposure From Adapted Luma[m
+ float exposureFromLuma(float smoothedLuma) {[m
+[1mdiff --git a/shaders/libs/irisEssentials.h b/shaders/libs/irisEssentials.h[m
+[1mindex 8ced192..c8002a7 100644[m
+[1m--- a/shaders/libs/irisEssentials.h[m
+[1m+++ b/shaders/libs/irisEssentials.h[m
+[36m@@ -20,7 +20,8 @@[m [mconst int colortex6Format    = R11F_G11F_B10F;[m
+ const int colortex8Format    = R11F_G11F_B10F;[m
+ const int colortex10Format   = R11F_G11F_B10F;[m
+ const int colortex12Format   = R11F_G11F_B10F;[m
+[31m-const int colortex13Format   = R11F_G11F_B10F;[m
+[32m+[m[32mconst int colortex13Format   = RGBA16F;[m
+[32m+[m[32mconst int colortex14Format   = RGBA16F;[m
+ */[m
+ [m
+ // (004) Mipmapping[m
+[1mdiff --git a/shaders/libs/nightEditor.h b/shaders/libs/nightEditor.h[m
+[1mindex e154729..621fd85 100644[m
+[1m--- a/shaders/libs/nightEditor.h[m
+[1m+++ b/shaders/libs/nightEditor.h[m
+[36m@@ -56,7 +56,7 @@[m [mfloat moonIlluminationFromPhase(int phase) {[m
+ }[m
+ [m
+ // (012) Key Light[m
+[31m-void getKeyLight(vec3 sunDirW, vec3 shadowDirW, vec3 sunlightC, vec3 sunC, int phase,[m
+[32m+[m[32mvoid getKeyLight(vec3 sunDirW, vec3 shadowDirW, vec3 sunKeyC, vec3 sunC, int phase,[m
+                  out vec3 keyDir, out vec3 keyC, out vec3 keyDiscC, out vec3 keySpecC, out vec4 nightP) {[m
+     float nightW   = nightWeightFromSun(sunDirW.y),[m
+           moonIll  = moonIlluminationFromPhase(phase),[m
+[36m@@ -69,9 +69,9 @@[m [mvoid getKeyLight(vec3 sunDirW, vec3 shadowDirW, vec3 sunlightC, vec3 sunC, int p[m
+          moonC   = NIGHT_MOON_ILLUMINANCE * moonLow * moonVis;[m
+ [m
+     keyDir   = shadowDirW;[m
+[31m-    keyC     = shadowIsSun ? sunlightC : moonC;[m
+[32m+[m[32m    keyC     = shadowIsSun ? sunKeyC : moonC;[m
+     keyDiscC = shadowIsSun ? sunC      : moonC;[m
+[31m-    keySpecC = shadowIsSun ? sunC      : NIGHT_MOON_SPECULAR;[m
+[32m+[m[32m    keySpecC = shadowIsSun ? sunC      : moonC * NIGHT_MOON_SPECULAR;[m
+     nightP   = vec4(nightW, moonIll, cos(phaseAng), sin(phaseAng));[m
+ }[m
+ [m
+[1mdiff --git a/shaders/shaders.properties b/shaders/shaders.properties[m
+[1mindex 2180fbe..d0474e9 100644[m
+[1m--- a/shaders/shaders.properties[m
+[1m+++ b/shaders/shaders.properties[m
+[36m@@ -14,6 +14,7 @@[m [msize.buffer.colortex8=0.03125 0.03125[m
+ size.buffer.colortex10=0.0625 0.0625[m
+ size.buffer.colortex12=0.125 0.125[m
+ size.buffer.colortex13=0.25 0.25[m
+[32m+[m[32msize.buffer.colortex14=0.5 0.5[m
+ texture.blur.colortex5=false[m
+ [m
+ customTexture.skyAtlas=textures/skyAtlas.png[m

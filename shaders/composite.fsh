@@ -19,10 +19,9 @@ uniform float viewHeight;
 uniform ivec2 eyeBrightnessSmooth;
 
 in vec2 texCoord;
-in vec3 sunDir,
-        moonDir;
+flat in vec3 sunDir,
+             moonDir;
 flat in vec3 sunC,
-             sunlightC,
              ambientC,
              skyC,
              horizonC,
@@ -32,6 +31,11 @@ flat in vec3 keyDir,
              keySpecC;
 flat in vec4 nightP,
              vAtlas;
+flat in vec3  fogKeyC,
+              uwBodyC;
+flat in float skyPx,
+              skyExposure,
+              glintGate;
 
 #ifndef PI
     #define PI 3.141592653589793
@@ -199,12 +203,11 @@ void main() {
 
     const vec3 up = vec3(0.0, 1.0, 0.0);
     vec3  V          = normalize(cameraPosition - worldPos);
-    float pixelAngle = 2.0 / (gbufferProjection[1][1] * viewHeight);
 
     vec3 playerPos = mat3(gbufferModelViewInverse) * viewPos + gbufferModelViewInverse[3].xyz;
     vec2 waveXZ    = swellCoord(playerPos.xz, cameraPosition);
 
-    SwellSample wave = swellDetail(waveXZ, frameTimeCounter, V, viewDistance, pixelAngle);
+    SwellSample wave = swellDetail(waveXZ, frameTimeCounter, V, viewDistance, skyPx);
 
     vec3  nDetail      = swellNormalWS(wave.grad);
     float roughness    = min(sqrt(WATER_BASE_ROUGHNESS * WATER_BASE_ROUGHNESS + wave.rough * wave.rough), 0.5),
@@ -224,7 +227,7 @@ void main() {
               tir     = 1.0 - smoothstep(0.60, 0.72, cosI),
               mirrorConf;
         vec3  mirror  = environmentReflection(viewPos, nTraceV, nDownV, reflDir, roughness, -1e9, UW_SSR_DISTANCE, 0.0, 0.0, vec3(1.0), vec3(1.0), mirrorConf),
-              bodyCol = ambientC * UW_AMBIENT * UW_WATER_COLOR * UW_ALBEDO * exp(-UW_AMBIENT_EXT * uwEyeDepth());
+              bodyCol = uwBodyC;
         mirror = applyFog(mix(bodyCol, mirror, mirrorConf), gbufferModelViewInverse[3].xyz, playerPos, getIGN(gl_FragCoord.xy), 1.0, keyDir, keyDiscC, ambientC, false);
         float fresUp  = mix(F_Schlick(cosI, vec3(WATER_F0), roughness).x, 1.0, tir);
         outColor = vec4(mix(sceneColor, mirror, fresUp), 1.0);
@@ -251,14 +254,12 @@ void main() {
     waterMat.F0       = vec3(WATER_F0);
     waterMat.metallic = 0.0;
     waterMat.emissive = 0.0;
-    vec3 glint = shadeSunSpecular(waterMat, nDetail, V, keyDir, sunlightC, keySpecC) * smoothstep(-0.02, 0.06, keyDir.y)
-               * ((NIGHT_MOON_GLINT != 0) ? 1.0 : 1.0 - nightP.x);
+    vec3 glint = shadeSunSpecular(waterMat, nDetail, V, keyDir, keySpecC) * glintGate;
     glint = glint / (1.0 + glint / WATER_GLINT_MAX);
     waterColor += glint * (1.0 - ssrConfidence * WATER_GLINT_SSR_MASK);
 
-    float fogDither   = getIGN(gl_FragCoord.xy),
-          skyExposure = mix(FOG_CAVE_FLOOR, 1.0, saturate(float(eyeBrightnessSmooth.y) / 240.0));
-    waterColor = applyFog(waterColor, gbufferModelViewInverse[3].xyz, playerPos, fogDither, skyExposure, keyDir, keyDiscC * ((NIGHT_MOON_FOG_SHAFTS != 0) ? 1.0 : 1.0 - nightP.x), ambientC, false);
+    float fogDither = getIGN(gl_FragCoord.xy);
+    waterColor = applyFog(waterColor, gbufferModelViewInverse[3].xyz, playerPos, fogDither, skyExposure, keyDir, fogKeyC, ambientC, false);
 
     outColor = vec4(waterColor, 1.0);
 }

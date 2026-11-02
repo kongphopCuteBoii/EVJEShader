@@ -2,6 +2,7 @@
 #define VOLUMETRIC_FOG_GLSL
 
 #include "/libs/skyGrade.h"
+#include "/libs/fogConstants.h"
 
 #ifndef PI
     #define PI 3.141592653589793
@@ -9,30 +10,6 @@
 #ifndef saturate
     #define saturate(x) clamp(x, 0.0, 1.0)
 #endif
-
-// (071) Fog Constants
-#ifndef FOG_STEPS
-    #define FOG_STEPS 12
-#endif
-#ifndef FOG_STEPS_PER_BLOCK
-    #define FOG_STEPS_PER_BLOCK 0.3
-#endif
-
-const float FOG_DENSITY           = 0.0035,
-            FOG_BASE_HEIGHT       = 61.0,
-            FOG_FALLOFF           = 16.0,
-            FOG_MAX_EXPONENT      = 2.0,
-            FOG_MARCH_DIST        = 160.0,
-            FOG_SKY_DIST          = 512.0,
-            FOG_SCATTER_ALBEDO    = 0.95,
-            FOG_SUN_INTENSITY     = 0.60,
-            FOG_AMBIENT_INTENSITY = 0.25,
-            FOG_MIE_G_FORWARD     = 0.78,
-            FOG_MIE_G_SOFT        = 0.25,
-            FOG_MIE_BLEND         = 0.65,
-            FOG_SHADOW_BIAS       = 0.0002,
-            FOG_CAVE_FLOOR        = 0.10;
-const vec3  FOG_TINT              = vec3(SKY_GRADE.x, SKY_GRADE.y * 0.95, SKY_GRADE.z) * 0.7;
 
 // (072) Henyey-Greenstein Phase
 float phaseHG(float cosTheta, float g) {
@@ -64,6 +41,18 @@ vec3 fogDistortShadow(vec3 shadowClipPos) {
     return shadowClipPos;
 }
 
+// Orthographic shadow clip is affine along a ray: clip(start + dir * t) = clip(start) + clipDir(dir) * t
+vec3 fogShadowClip(vec3 p) {
+    vec3 v = mat3(shadowModelView) * p + shadowModelView[3].xyz;
+    return vec3(v.xy * vec2(shadowProjection[0][0], shadowProjection[1][1]) + shadowProjection[3].xy,
+                v.z * shadowProjection[2][2] + shadowProjection[3][2]);
+}
+
+vec3 fogShadowClipDir(vec3 d) {
+    vec3 v = mat3(shadowModelView) * d;
+    return vec3(v.xy * vec2(shadowProjection[0][0], shadowProjection[1][1]), v.z * shadowProjection[2][2]);
+}
+
 float fogShadow(vec3 shadowClipPos) {
     vec3 shadowScreenPos = fogDistortShadow(shadowClipPos) * 0.5 + 0.5;
     if (saturate(shadowScreenPos) != shadowScreenPos) return 1.0;
@@ -82,8 +71,8 @@ vec4 getVolumetricFog(vec3 rayStart, vec3 rayEnd, float dither, float skyExposur
           ambScatter = ambCol * (FOG_AMBIENT_INTENSITY * skyExposure);
 
     vec3 marchEnd        = rayStart + rayDir * marchLen,
-         shadowClipStart = (shadowProjection * vec4((shadowModelView * vec4(rayStart, 1.0)).xyz, 1.0)).xyz,
-         shadowClipEnd   = (shadowProjection * vec4((shadowModelView * vec4(marchEnd, 1.0)).xyz, 1.0)).xyz;
+         shadowClipStart = fogShadowClip(rayStart),
+         shadowClipDir   = fogShadowClipDir(rayDir);
 
     int   steps         = int(clamp(ceil(marchLen * FOG_STEPS_PER_BLOCK), 4.0, float(FOG_STEPS)));
     bool  sunLit        = max(sunScatter.r, max(sunScatter.g, sunScatter.b)) > 1e-5;
@@ -100,7 +89,7 @@ vec4 getVolumetricFog(vec3 rayStart, vec3 rayEnd, float dither, float skyExposur
               sampleY   = cameraPosition.y + rayStart.y + rayDir.y * sampleT,
               density   = fogDensity(sampleY),
               stepTrans = exp(-density * stepLen);
-        vec3  stepLight = (sunLit ? sunScatter * fogShadow(mix(shadowClipStart, shadowClipEnd, sampleT / max(marchLen, 1e-4))) : vec3(0.0)) + ambScatter;
+        vec3  stepLight = (sunLit ? sunScatter * fogShadow(shadowClipStart + shadowClipDir * sampleT) : vec3(0.0)) + ambScatter;
         inScatter     += transmittance * stepLight * (FOG_SCATTER_ALBEDO * (1.0 - stepTrans));
         transmittance *= stepTrans;
         if (transmittance < 0.01) break;
@@ -117,24 +106,6 @@ vec4 getVolumetricFog(vec3 rayStart, vec3 rayEnd, float dither, float skyExposur
 
 // (080) UNDERWATER MEDIUM
 uniform int isEyeInWater;
-
-#ifndef UW_STEPS
-    #define UW_STEPS 10
-#endif
-const vec3  UW_EXTINCTION      = vec3(0.150, 0.052, 0.042),
-            UW_LIGHT_EXT       = vec3(0.280, 0.085, 0.060),
-            UW_AMBIENT_EXT     = vec3(0.110, 0.040, 0.030),
-            UW_WATER_COLOR     = vec3(0.30, 1.00, 0.85);
-const float UW_MARCH_DIST      = 72.0,
-            UW_SKY_DIST        = 56.0,
-            UW_LIGHT_DEPTH     = 15.0,
-            UW_ALBEDO          = 0.92,
-            UW_SUN_INTENSITY   = 1.5,
-            UW_AMBIENT         = 2.2,
-            UW_PHASE_G         = 0.72,
-            UW_SHAFT_CONTRAST  = 0.55,
-            UW_CAUSTIC_STRENGTH = 0.75,
-            UW_CAUSTIC_FADE    = 0.10;
 
 // (081) Eye Depth Below The Surface
 float uwEyeDepth() {
@@ -172,9 +143,8 @@ vec3 applyUnderwaterFog(vec3 color, vec3 rayStart, vec3 rayEnd, float dither, ve
           cosTheta = dot(rayDir, keyDirW),
           phase    = phaseHG(cosTheta, UW_PHASE_G) + 0.08;
     vec3  sunScatter = keyCol * (phase * UW_SUN_INTENSITY),
-          marchEnd   = rayStart + rayDir * marchLen,
-          clipStart  = (shadowProjection * vec4((shadowModelView * vec4(rayStart, 1.0)).xyz, 1.0)).xyz,
-          clipEnd    = (shadowProjection * vec4((shadowModelView * vec4(marchEnd, 1.0)).xyz, 1.0)).xyz;
+          clipStart  = fogShadowClip(rayStart),
+          clipDir    = fogShadowClipDir(rayDir);
 
     float invSteps = 1.0 / float(UW_STEPS),
           slant    = 1.0 / max(keyDirW.y, 0.3),
@@ -195,7 +165,7 @@ vec3 applyUnderwaterFog(vec3 color, vec3 rayStart, vec3 rayEnd, float dither, ve
 
         vec3  samplePos = rayStart + rayDir * sampleT;
         float shaft     = mix(1.0, 0.45 + 1.1 * smoothstep(0.25, 0.95, uwCausticRidge(cameraPosition.xz + samplePos.xz - lightXZ * depth, time)), UW_SHAFT_CONTRAST),
-              lit       = fogShadow(mix(clipStart, clipEnd, sampleT / max(marchLen, 1e-4)));
+              lit       = fogShadow(clipStart + clipDir * sampleT);
         vec3  stepLight = sunScatter * exp(-UW_LIGHT_EXT * (depth * slant)) * (lit * shaft)
                         + ambCol * UW_AMBIENT * exp(-UW_AMBIENT_EXT * depth);
         inScatter += trans * stepLight * (UW_ALBEDO * (vec3(1.0) - stepTrans));

@@ -6,10 +6,9 @@ uniform vec3 cameraPosition;
 uniform float near, far, frameTimeCounter;
 uniform ivec2 eyeBrightnessSmooth;
 in vec2 texCoord;
-in vec3 sunDir,
-        moonDir;
+flat in vec3 sunDir,
+             moonDir;
 flat in vec3 sunC,
-             sunlightC,
              ambientC,
              skyC,
              horizonC,
@@ -19,6 +18,10 @@ flat in vec3 keyDir,
              keySpecC;
 flat in vec4 nightP,
              vAtlas;
+flat in vec3  fogKeyC,
+              cloudSunC,
+              cloudAmbC;
+flat in float skyExposure;
 /* DRAWBUFFERS:0 */
 layout(location = 0) out vec4 outColor;
 
@@ -50,7 +53,7 @@ vec3 cloudsOverSurface(vec3 color, vec3 footPlayerPos) {
             float cloudTrans;
             vec3  cloudRad;
             color = CLOUD_GRADE * miraiCloudCompositeCut(
-                cloudCam, rayDir, keyDir, keyDiscC * (CLOUD_SUN_INPUT * 5. * ((NIGHT_MOON_CLOUDS != 0) ? 1.0 : 1.0 - nightP.x)), ambientC * CLOUD_AMBIENT_INPUT,
+                cloudCam, rayDir, keyDir, cloudSunC, cloudAmbC,
                 color / CLOUD_GRADE, frameTimeCounter * CLOUD_WIND_SPEED, surfaceDist, cloudTrans, cloudRad);
         }
     #endif
@@ -79,8 +82,7 @@ void main() {
         color = refr * tint;
 
         vec3  glassPlayer = (gbufferModelViewInverse * vec4(viewPosFromDepth(gbufferProjectionInverse, texCoord, depth), 1.0)).xyz;
-        float skyExposure = mix(FOG_CAVE_FLOOR, 1.0, saturate(float(eyeBrightnessSmooth.y) / 240.0));
-        color = applyFog(color, gbufferModelViewInverse[3].xyz, glassPlayer, getIGN(gl_FragCoord.xy), skyExposure, keyDir, keyDiscC * ((NIGHT_MOON_FOG_SHAFTS != 0) ? 1.0 : 1.0 - nightP.x), ambientC, false);
+        color = applyFog(color, gbufferModelViewInverse[3].xyz, glassPlayer, getIGN(gl_FragCoord.xy), skyExposure, keyDir, fogKeyC, ambientC, false);
     }
 
     float dhDepth = (depth < 1.0) ? 1.0 : texture(dhDepthTex0, texCoord).r;

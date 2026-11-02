@@ -5,7 +5,6 @@
 #include "/libs/mathUtils.glsl"
 
 const int TYPE = 2;
-uniform mat4 gbufferModelViewInverse;
 uniform float viewWidth, viewHeight;
 uniform sampler2D depthtex0;
 uniform float far;
@@ -21,7 +20,7 @@ layout(location = 1) out vec4 outNormal;
 layout(location = 2) out vec4 outPBR;
 
 in vec4 fColor;
-in vec3 normalMap;
+in vec3 worldN;
 in vec2 lightCoord;
 in vec3 worldPos;
 flat in int isLeaves;
@@ -38,14 +37,13 @@ void main() {
     if (dhFadeDist < getIGN(gl_FragCoord.xy)) discard;
 
     vec3 baseColor = fColor.rgb;
+    vec3 worldNormal = normalize(worldN);
     #if DH_FACE_SHADE
-        vec3  cubeN     = abs(normalize(mat3(gbufferModelViewInverse) * normalMap));
-        float faceShade = dot(cubeN * cubeN, vec3(0.6, (mat3(gbufferModelViewInverse) * normalMap).y > 0.0 ? 1.0 : 0.5, 0.8));
+        vec3  cubeN     = abs(worldNormal);
+        float faceShade = dot(cubeN * cubeN, vec3(0.6, worldN.y > 0.0 ? 1.0 : 0.5, 0.8));
         baseColor *= faceShade;
     #endif
     vec3 albedo = pow_linear(baseColor);
-
-    vec3 worldNormal = normalize(mat3(gbufferModelViewInverse) * normalMap);
 
     if (isLeaves != 0) {
         vec3 absPos     = worldPos + cameraPosition,

@@ -56,7 +56,7 @@ float moonIlluminationFromPhase(int phase) {
 }
 
 // (012) Key Light
-void getKeyLight(vec3 sunDirW, vec3 shadowDirW, vec3 sunlightC, vec3 sunC, int phase,
+void getKeyLight(vec3 sunDirW, vec3 shadowDirW, vec3 sunKeyC, vec3 sunC, int phase,
                  out vec3 keyDir, out vec3 keyC, out vec3 keyDiscC, out vec3 keySpecC, out vec4 nightP) {
     float nightW   = nightWeightFromSun(sunDirW.y),
           moonIll  = moonIlluminationFromPhase(phase),
@@ -69,9 +69,9 @@ void getKeyLight(vec3 sunDirW, vec3 shadowDirW, vec3 sunlightC, vec3 sunC, int p
          moonC   = NIGHT_MOON_ILLUMINANCE * moonLow * moonVis;
 
     keyDir   = shadowDirW;
-    keyC     = shadowIsSun ? sunlightC : moonC;
+    keyC     = shadowIsSun ? sunKeyC : moonC;
     keyDiscC = shadowIsSun ? sunC      : moonC;
-    keySpecC = shadowIsSun ? sunC      : NIGHT_MOON_SPECULAR;
+    keySpecC = shadowIsSun ? sunC      : moonC * NIGHT_MOON_SPECULAR;
     nightP   = vec4(nightW, moonIll, cos(phaseAng), sin(phaseAng));
 }
 

@@ -4,7 +4,7 @@ uniform vec3 cameraPosition;
 uniform mat4 gbufferModelViewInverse, dhProjection;
 
 out vec4 fColor;
-out vec3 normalMap;
+out vec3 worldN;
 out vec2 lightCoord;
 out vec3 worldPos;
 flat out int isLeaves;
@@ -15,7 +15,7 @@ vec3 transform(mat4 m, vec3 pos) {
 
 void main() {
     fColor = gl_Color;
-    normalMap = gl_NormalMatrix * gl_Normal;
+    worldN = mat3(gbufferModelViewInverse) * (gl_NormalMatrix * gl_Normal);
     lightCoord = clamp(((gl_TextureMatrix[1] * gl_MultiTexCoord1).xy - 1.0 / 32.0) * (32.0 / 30.0), 0., 1.);
     isLeaves   = (dhMaterialId == DH_BLOCK_LEAVES) ? 1 : 0;
     vec3 cameraOffset = fract(cameraPosition);

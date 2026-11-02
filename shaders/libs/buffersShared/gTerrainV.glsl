@@ -8,11 +8,12 @@ uniform vec3 chunkOffset;
 uniform mat3 normalMatrix;
 uniform vec3 cameraPosition;
 uniform mat4 modelViewMatrix;
+uniform mat4 gbufferModelViewInverse;
 uniform mat4 projectionMatrix;
 
 out vec3 fColor;
 flat out int isFoliage, isLeaves, isTallTop;
-out vec3 normalMap;
+out vec3 worldN;
 out vec4 tangentData;
 out vec2 texCoord, lightCoord;
 out vec3 clumpN;
@@ -25,8 +26,9 @@ void main() {
         isFoliage = 1;
     }
 
-    tangentData = vec4(normalize(normalMatrix * at_tangent.xyz), at_tangent.w);
-    normalMap = normalMatrix * vaNormal;
+    mat3 viewToWorld = mat3(gbufferModelViewInverse);
+    tangentData = vec4(viewToWorld * normalize(normalMatrix * at_tangent.xyz), at_tangent.w);
+    worldN = viewToWorld * (normalMatrix * vaNormal);
     texCoord = vaUV0; 
     fColor = vaColor.rgb; 
     lightCoord = vaUV2 * 3.9e-3 + 3.125e-2;

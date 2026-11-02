@@ -12,6 +12,15 @@
 #ifndef CLOUD_MAX_ITER
 #define CLOUD_MAX_ITER 640
 #endif
+#ifndef CLOUD_LIGHT_TAPS_HI
+#define CLOUD_LIGHT_TAPS_HI 6
+#endif
+#ifndef CLOUD_LIGHT_TAPS_LO
+#define CLOUD_LIGHT_TAPS_LO 3
+#endif
+#ifndef CLOUD_AMBIENT_TAPS
+#define CLOUD_AMBIENT_TAPS 3
+#endif
 #define CLD_HP highp
 #define CLD_MP mediump
 
@@ -28,14 +37,14 @@ const int      CLOUD_SKIP_ZERO_RUN=3;
 const CLD_HP float CLOUD_TRANS_CUT=0.005;
 const CLD_HP float CLOUD_LIGHT_MIN_WEIGHT=1e-3;
 const CLD_MP float CLOUD_LIGHT_LOW_WEIGHT=0.01;
-const CLD_HP float CLOUD_STEP_GROWTH_START=8000.0;
-const CLD_HP float CLOUD_STEP_GROWTH_RATE=1.0/4000.0;
+const CLD_HP float CLOUD_STEP_GROWTH_START=400.0;
+const CLD_HP float CLOUD_STEP_GROWTH_RATE=1.0/1500.0;
 const CLD_MP float CLOUD_DENSE_MULT=3.0;
 const CLD_MP float CLOUD_DENSE_LO=0.04;
 const CLD_MP float CLOUD_DENSE_HI=0.10;
-const CLD_HP float CLOUD_MAX_DIST=14000.0;
-const CLD_HP float CLOUD_FADE_START=4000.0;
-const CLD_HP float CLOUD_FADE_END=12000.0;
+const CLD_HP float CLOUD_MAX_DIST=12000.0;
+const CLD_HP float CLOUD_FADE_START=1500.0;
+const CLD_HP float CLOUD_FADE_END=10000.0;
 const CLD_MP float CLOUD_FADE_MAX=1.0;
 const CLD_MP float CLOUD_RADIANCE_TRIM=1.0163;
 
@@ -45,8 +54,8 @@ const CLD_MP float CLOUD_MULTIPLE_SCALE=1.30;
 const CLD_MP float CLOUD_IN_SCATTER_STRENGTH=0.07;
 const CLD_MP float CLOUD_AMBIENT_SCALE=0.50;
 const CLD_MP float CLOUD_AMBIENT_OCCLUSION_SCALE=0.010;
-const CLD_MP float CLOUD_SHADOW_POWER=3.0;
-const CLD_MP float CLOUD_SILVER_GAIN=0.50;
+const CLD_MP float CLOUD_SHADOW_POWER=2.5;
+const CLD_MP float CLOUD_SILVER_GAIN=2.80;
 const CLD_MP float CLOUD_SKY_BOUNCE=0.50;
 const CLD_MP float CLOUD_AMBIENT_FLOOR=0.14;
 const CLD_MP float CLOUD_POWDER_GAIN=0.45;
@@ -136,8 +145,10 @@ vec3 miraiSkyAmbient(){
 }
 #endif
 
-CLD_HP vec3 miraiCloudCompositeCut(CLD_HP vec3 cam,CLD_HP vec3 rd,CLD_HP vec3 ld,CLD_MP vec3 sunCol,CLD_MP vec3 skyAmbientRaw,CLD_HP vec3 bg,
-                            CLD_HP float timeX,CLD_HP float tCut,out CLD_HP float transmittance,out CLD_HP vec3 radiance)
+// Returns the cloud layer as (R, T) so that final = bg * T + R. hazeExt / hazeCol give distance-based aerial perspective.
+void miraiCloudLayer(CLD_HP vec3 cam,CLD_HP vec3 rd,CLD_HP vec3 ld,CLD_MP vec3 sunCol,CLD_MP vec3 skyAmbientRaw,
+                     CLD_HP float timeX,CLD_HP float tCut,CLD_HP vec3 hazeExt,CLD_HP vec3 hazeCol,
+                     out CLD_HP vec3 R,out CLD_HP float T)
 {
     gCloudTime=timeX;
     CLD_MP vec3 ambientCol=skyAmbientRaw;
@@ -198,9 +209,9 @@ CLD_HP vec3 miraiCloudCompositeCut(CLD_HP vec3 cam,CLD_HP vec3 rd,CLD_HP vec3 ld
             if(weight>=CLOUD_LIGHT_MIN_WEIGHT){
                 CLD_MP float h=cloudHeight01(pp.y);
                 CLD_HP float lightPath=min(max((CLOUD_MAX_Y-pp.y)*invLdY,0.0),800.0);
-                int ns=(weight>=CLOUD_LIGHT_LOW_WEIGHT)?8:4;
+                int ns=(weight>=CLOUD_LIGHT_LOW_WEIGHT)?CLOUD_LIGHT_TAPS_HI:CLOUD_LIGHT_TAPS_LO;
                 CLD_MP float odSum=0.0;
-                for(int i=0;i<8;i++){
+                for(int i=0;i<CLOUD_LIGHT_TAPS_HI;i++){
                     if(i>=ns) break;
                     CLD_HP float u=(float(i)+0.5)/float(ns);
                     odSum+=cloudDensityFull(pp+ld*(lightPath*u));
@@ -232,10 +243,11 @@ CLD_HP vec3 miraiCloudCompositeCut(CLD_HP vec3 cam,CLD_HP vec3 rd,CLD_HP vec3 ld
                 CLD_MP vec3 inscatter=(depthProb*vertProb*Tsh*secondary*CLOUD_IN_SCATTER_STRENGTH)*inscCol;
 
                 CLD_MP float ambOd=0.0;
-                for(int k=0;k<4;k++){
-                    CLD_HP float ay=pp.y+35.0+70.0*float(k);
+                const CLD_MP float ambSpan=280.0/float(CLOUD_AMBIENT_TAPS);
+                for(int k=0;k<CLOUD_AMBIENT_TAPS;k++){
+                    CLD_HP float ay=pp.y+0.5*ambSpan+ambSpan*float(k);
                     if(ay>CLOUD_MAX_Y) break;
-                    CLD_MP float pr; ambOd+=cloudDensityFromBase(bb,vec3(pp.x,ay,pp.z),pr)*70.0;
+                    CLD_MP float pr; ambOd+=cloudDensityFromBase(bb,vec3(pp.x,ay,pp.z),pr)*ambSpan;
                 }
                 CLD_MP float ambProb=(CLOUD_AMBIENT_FLOOR+(1.0-CLOUD_AMBIENT_FLOOR)*sqrt(max(1.0-profile,0.0)))*exp(-ambOd*CLOUD_AMBIENT_OCCLUSION_SCALE);
                 CLD_MP vec3 ambient=(ambProb*CLOUD_AMBIENT_SCALE)*ambientCol;
@@ -249,10 +261,21 @@ CLD_HP vec3 miraiCloudCompositeCut(CLD_HP vec3 cam,CLD_HP vec3 rd,CLD_HP vec3 ld
         t+=sf;
     }
     }
-    radiance=rad*CLOUD_RADIANCE_TRIM; transmittance=trans;
-    CLD_HP vec3 color=trans*bg+radiance;
-    CLD_HP float fade=CLOUD_FADE_MAX*smoothstep(CLOUD_FADE_START,CLOUD_FADE_END,wsumT/max(wsum,CLOUD_EPS))*(wsum>0.0?1.0:0.0);
-    return bg+(color-bg)*(1.0-fade);
+    CLD_HP float dist=wsumT/max(wsum,CLOUD_EPS);
+    CLD_HP vec3 air=exp2(-hazeExt*dist);
+    CLD_HP vec3 radiance=rad*CLOUD_RADIANCE_TRIM*air+hazeCol*(1.0-air)*(1.0-trans);
+    CLD_HP float fade=CLOUD_FADE_MAX*smoothstep(CLOUD_FADE_START,CLOUD_FADE_END,dist)*(wsum>0.0?1.0:0.0);
+    T=1.0-(1.0-trans)*(1.0-fade);
+    R=radiance*(1.0-fade);
+}
+
+CLD_HP vec3 miraiCloudCompositeCut(CLD_HP vec3 cam,CLD_HP vec3 rd,CLD_HP vec3 ld,CLD_MP vec3 sunCol,CLD_MP vec3 skyAmbientRaw,CLD_HP vec3 bg,
+                            CLD_HP float timeX,CLD_HP float tCut,out CLD_HP float transmittance,out CLD_HP vec3 radiance)
+{
+    CLD_HP vec3 R; CLD_HP float T;
+    miraiCloudLayer(cam,rd,ld,sunCol,skyAmbientRaw,timeX,tCut,vec3(0.0),vec3(0.0),R,T);
+    transmittance=T; radiance=R;
+    return bg*T+R;
 }
 
 CLD_HP vec3 miraiCloudComposite(CLD_HP vec3 cam,CLD_HP vec3 rd,CLD_HP vec3 ld,CLD_MP vec3 sunCol,CLD_MP vec3 skyAmbientRaw,CLD_HP vec3 bg,

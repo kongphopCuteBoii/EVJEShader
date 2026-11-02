@@ -20,7 +20,8 @@ const int colortex6Format    = R11F_G11F_B10F;
 const int colortex8Format    = R11F_G11F_B10F;
 const int colortex10Format   = R11F_G11F_B10F;
 const int colortex12Format   = R11F_G11F_B10F;
-const int colortex13Format   = R11F_G11F_B10F;
+const int colortex13Format   = RGBA16F;
+const int colortex14Format   = RGBA16F;
 */
 
 // (004) Mipmapping

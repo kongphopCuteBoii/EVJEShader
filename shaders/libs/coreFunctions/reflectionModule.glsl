@@ -19,7 +19,6 @@ vec3 environmentReflection(vec3 viewPos, vec3 nTraceView, vec3 nDetailView, vec3
     float ssrOcclusion = 0.0;
     vec4  ssr          = traceWaterSSR(viewPos, nTraceView, nDetailView, roughness, maxDistance, surfaceWorldY, ssrOcclusion);
 
-    float skyPx = 2.0 / (gbufferProjection[1][1] * viewHeight);
     vec3  sky   = skyHDR(reflectDirWorld, vAtlas, sunDir, vec3(0.0), skyC, horizonC, skyPx * 1.5, skyPx) * skyGrade * skyGain;
     sky += nightSky(reflectDirWorld, sunDir, nightP, skyPx, frameTimeCounter, 0.0) * skyGain;
     sky *= mix(1.0, REFLECTION_OCCLUDED_SKY, ssrOcclusion) * skyVisibility;

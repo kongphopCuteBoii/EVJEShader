@@ -3,7 +3,6 @@
 #include "/libs/labPBR.glsl"
 #include "/libs/mathUtils.glsl"
 uniform sampler2D gtexture, specular;
-uniform mat4 gbufferModelViewInverse;
 uniform vec4 entityColor;
 
 /* DRAWBUFFERS:012 */
@@ -11,7 +10,7 @@ layout(location = 0) out vec4 outColor;
 layout(location = 1) out vec4 outNormal;
 layout(location = 2) out vec4 outPBR;
 
-in vec3 fColor, normalMap;
+in vec3 fColor, worldN;
 flat in int isCloth;
 in vec2 texCoord, lightCoord;
 
@@ -23,7 +22,7 @@ void main() {
     albedo = mix(albedo, entityColor.rgb, entityColor.a);
     albedo = pow_linear(albedo);
 
-    vec3 worldNormal = normalize(mat3(gbufferModelViewInverse) * normalMap);
+    vec3 worldNormal = normalize(worldN);
     if (!gl_FrontFacing) worldNormal = -worldNormal;
 
     // (000) Specular Data

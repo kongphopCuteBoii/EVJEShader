@@ -8,8 +8,12 @@
 #define CLOUD_WIND_SPEED        7.0
 #define CLOUD_ALTITUDE_BIAS     200.0
 #define CLOUD_GRADE             0.3
+#define CLOUD_AMBIENT_HORIZON   0.8
+#define CLOUD_HAZE_DIST         2200.0
+#define CLOUD_HAZE_GAIN         1.0
+#define CLOUD_HAZE_SUN          0.06
 
-#ifdef MIRAI_CLOUDS
+#if defined(MIRAI_CLOUDS) && !defined(CLOUD_SETTINGS_ONLY)
     #include "/libs/coreFunctions/miraiClouds.glsl"
 #endif
 

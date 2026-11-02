@@ -3,10 +3,10 @@
 #include "/libs/mathUtils.glsl"
 #include "/libs/coreFunctions/bloomKawase.glsl"
 
-uniform sampler2D colortex0, colortex7, colortex11;
+uniform sampler2D colortex0, colortex7;
 uniform float viewWidth, viewHeight;
-uniform int   isEyeInWater;
 in vec2 texCoord;
+flat in float exposure, bloomK;
 layout(location = 0) out vec4 fragColor;
 
 // (200) Color-related Utilities
@@ -49,15 +49,7 @@ vec3 uchimura(vec3 x) {
 #define AGX_SHADOW_LIFT 0.001 
 
 vec3 agxDefaultContrastApprox(vec3 x) {
-    vec3 x2 = x * x;
-    vec3 x4 = x2 * x2;
-    
-    vec3 val = + 15.5 * x4 * x2
-               - 40.14 * x4 * x
-               + 31.96 * x4
-               - 6.868 * x2 * x
-               + 0.4298 * x2
-               + 0.1191 * x;
+    vec3 val = x * (0.1191 + x * (0.4298 + x * (-6.868 + x * (31.96 + x * (-40.14 + x * 15.5)))));
 
     return max(val, 0.0);
 }
@@ -101,13 +93,7 @@ vec3 crystalineCG(vec3 color) {
 void main() {
     vec3 color = texture(colortex0, texCoord).rgb;
 
-    float smoothedLuma = texelFetch(colortex11, ivec2(0), 0).r;
-    
-    float exposure = exposureFromLuma(smoothedLuma);
-
-    float bloomK = BLOOM_STRENGTH * clamp(pow(exposure / BLOOM_GLARE_REF, BLOOM_GLARE_POWER), 1.0 / BLOOM_GLARE_MAX, BLOOM_GLARE_MAX)
-                 * ((isEyeInWater == 1) ? BLOOM_UNDERWATER : 1.0);
-    color = mix(color, bloomBilinear(colortex7, texCoord).rgb, saturate(bloomK));
+    color = mix(color, bloomBilinear(colortex7, texCoord).rgb, bloomK);
 
     color *= exposure;
     color = mix(vec3(dot(color, LUMA_COEFF)), color, 0.95);

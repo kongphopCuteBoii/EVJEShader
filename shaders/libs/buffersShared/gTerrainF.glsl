@@ -5,7 +5,6 @@
 #include "/libs/mathUtils.glsl"
 uniform sampler2D gtexture;
 uniform sampler2D normals, specular;
-uniform mat4 gbufferModelViewInverse;
 
 /* DRAWBUFFERS:012 */
 layout(location = 0) out vec4 outColor;
@@ -14,7 +13,7 @@ layout(location = 2) out vec4 outPBR;
 
 in vec3 fColor;
 flat in int isFoliage, isLeaves, isTallTop;
-in vec3 normalMap;
+in vec3 worldN;
 in vec4 tangentData;
 in vec2 texCoord, lightCoord;
 in vec3 clumpN;
@@ -32,8 +31,8 @@ void main() {
     vec3 albedo = pow_linear(rawTexture.rgb * fColor);
 
     // (000) World Space Normal
-    vec3 cubeNormal   = mat3(gbufferModelViewInverse) * normalMap,
-         worldTangent = mat3(gbufferModelViewInverse) * tangentData.xyz;
+    vec3 cubeNormal   = worldN,
+         worldTangent = tangentData.xyz;
     mat3 TBN = tbnNormalTangent(cubeNormal, worldTangent);
 
     vec3 worldNormal;

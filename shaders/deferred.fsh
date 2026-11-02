@@ -30,6 +30,8 @@ uniform mat4 shadowModelView, shadowModelViewInverse;
 uniform mat4 shadowProjection, shadowProjectionInverse;
 
 in vec2 texCoord;
+flat in int   nightNoGI;
+flat in float aspect;
 
 #include "/libs/mathUtils.glsl"
 
@@ -128,7 +130,6 @@ vec3 hNormal = worldNormal * 0.5 + 0.5;
     float aoFade = 1.0 - smoothstep(48.0, 80.0, viewDist);
 
     if (aoFade > 0.0 && !isDHTerrain) {
-        float aspect = viewWidth / viewHeight;
         float aoRadius = 1.0;
         
         float projScale = 0.5 * aoRadius / viewDist;
@@ -170,9 +171,8 @@ vec3 hNormal = worldNormal * 0.5 + 0.5;
     float rsmFade = 1.0 - smoothstep(60.0, 100.0, viewDist);
     const vec3 SUN_LIGHT_COLOR = vec3(1.0);
 
-    bool nightNoGI = (NIGHT_RSM_GI == 0) && (normalize(mat3(gbufferModelViewInverse) * sunPosition).y < -0.03);
-    if (rsmFade > 0.0 && !isDHTerrain && !nightNoGI) {
-        const int   RSM_SAMPLES      = 24;
+    if (rsmFade > 0.0 && !isDHTerrain && nightNoGI == 0) {
+        const int   RSM_SAMPLES      = 16;
         const float RSM_WORLD_RADIUS = 2.0;
         const float RSM_MIN_DIST_SQ  = 0.25;
         const float RSM_MAX_DIST_SQ  = 64.0;

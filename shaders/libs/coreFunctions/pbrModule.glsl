@@ -78,11 +78,11 @@ bool isReflective(Material mat) {
 }
 
 // (019) Sun Specular Lobe
-vec3 specularLobe(Material mat, float NdotL, float NdotV, float NdotH, vec3 fresnel, vec3 lightIlluminance, vec3 sunCol) {
-    return fresnel * (D_GGX(NdotH, mat.alpha) * V_SmithGGXCorrelated(NdotV, NdotL, mat.alpha)) * sunCol * 2.0 * lightIlluminance * NdotL;
+vec3 specularLobe(Material mat, float NdotL, float NdotV, float NdotH, vec3 fresnel, vec3 sunCol) {
+    return fresnel * (D_GGX(NdotH, mat.alpha) * V_SmithGGXCorrelated(NdotV, NdotL, mat.alpha)) * sunCol * 2.0 * NdotL;
 }
 
-vec3 shadeSunSpecular(Material mat, vec3 normal, vec3 viewDir, vec3 lightDir, vec3 lightIlluminance, vec3 sunCol) {
+vec3 shadeSunSpecular(Material mat, vec3 normal, vec3 viewDir, vec3 lightDir, vec3 sunCol) {
     float NdotL = dot(normal, lightDir);
     if (NdotL <= 0.0) return vec3(0.0);
 
@@ -91,7 +91,7 @@ vec3 shadeSunSpecular(Material mat, vec3 normal, vec3 viewDir, vec3 lightDir, ve
           NdotH   = clamp(dot(normal, halfDir), 0.0, 1.0),
           VdotH   = clamp(dot(viewDir, halfDir), 0.0, 1.0);
 
-    return specularLobe(mat, NdotL, NdotV, NdotH, F_Schlick(VdotH, mat.F0, mat.pRough), lightIlluminance, sunCol);
+    return specularLobe(mat, NdotL, NdotV, NdotH, F_Schlick(VdotH, mat.F0, mat.pRough), sunCol);
 }
 
 // (020) Direct Analytical Light Evaluation
@@ -106,17 +106,19 @@ vec3 shadeDirect(Material mat, vec3 normal, vec3 viewDir, vec3 lightDir, vec3 li
     vec3  fresnel  = F_Schlick(VdotH, mat.F0, mat.pRough),
           diffuse  = (1.0 - fresnel) * (1.0 - mat.metallic) * mat.albedo / PI;
 
-    return diffuse * lightIlluminance * NdotL + specularLobe(mat, NdotL, NdotV, NdotH, fresnel, lightIlluminance, sunCol);
+    return diffuse * lightIlluminance * NdotL + specularLobe(mat, NdotL, NdotV, NdotH, fresnel, sunCol);
 }
 
 // (021) Image-Based / Environmental Ambient Shading
 vec3 shadeAmbient(Material mat, vec3 normal, vec3 viewDir, vec3 skyIrradiance, vec3 skyReflection, float ao) {
-    float NdotV = max(dot(normal, viewDir), 1e-4);
-
-    vec3  specularEnv = EnvBRDFApprox(mat.F0, mat.pRough, NdotV) * PBR_AMBIENT_SPECULAR,
-          diffuseEnv  = (1.0 - specularEnv) * (1.0 - mat.metallic),
-          diffuse     = diffuseEnv * mat.albedo * skyIrradiance,
-          specular    = specularEnv * skyReflection;
+    vec3 specularEnv = vec3(0.0),
+         specular    = vec3(0.0);
+    if (PBR_AMBIENT_SPECULAR > 0.0) {
+        specularEnv = EnvBRDFApprox(mat.F0, mat.pRough, max(dot(normal, viewDir), 1e-4)) * PBR_AMBIENT_SPECULAR;
+        specular    = specularEnv * skyReflection;
+    }
+    vec3 diffuseEnv = (1.0 - specularEnv) * (1.0 - mat.metallic),
+         diffuse    = diffuseEnv * mat.albedo * skyIrradiance;
 
     return (diffuse + specular) * ao;
 }
